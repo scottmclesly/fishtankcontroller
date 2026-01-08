@@ -109,6 +109,11 @@ void setup() {
 }
 
 void loop() {
+  // Handle web server periodic tasks (history updates, NTP retries)
+  if (webServer != nullptr) {
+    webServer->loop();
+  }
+
   POETResult result;
 
   Serial.println("========================================");

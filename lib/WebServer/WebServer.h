@@ -4,11 +4,25 @@
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <time.h>
 
 // Forward declaration
 struct POETResult;
 class WiFiManager;
 class CalibrationManager;
+
+// Data history configuration
+#define HISTORY_SIZE 288  // 288 points = 24 hours at 5-minute intervals (or 24 min at 5s intervals)
+#define HISTORY_INTERVAL_MS 5000  // 5 seconds between data points
+
+struct DataPoint {
+    time_t timestamp;
+    float temp_c;
+    float orp_mv;
+    float ph;
+    float ec_ms_cm;
+    bool valid;
+};
 
 class AquariumWebServer {
 public:
@@ -19,6 +33,12 @@ public:
 
     // Update sensor data (call this from main loop)
     void updateSensorData(const POETResult& result);
+
+    // Handle loop tasks (e.g., periodic history updates)
+    void loop();
+
+    // Initialize NTP time synchronization
+    void initNTP();
 
     // Get server instance
     AsyncWebServer* getServer() { return &server; }
@@ -43,6 +63,19 @@ private:
     unsigned long lastUpdate;
     bool dataValid;
 
+    // Data history (circular buffer)
+    DataPoint history[HISTORY_SIZE];
+    int historyHead;
+    int historyCount;
+    unsigned long lastHistoryUpdate;
+
+    // NTP synchronization
+    bool ntpInitialized;
+    const char* ntpServer1 = "pool.ntp.org";
+    const char* ntpServer2 = "time.nist.gov";
+    const long gmtOffset_sec = 0;
+    const int daylightOffset_sec = 0;
+
     // Setup routes
     void setupRoutes();
 
@@ -60,11 +93,17 @@ private:
     void handleClearPhCalibration(AsyncWebServerRequest *request);
     void handleClearEcCalibration(AsyncWebServerRequest *request);
     void handleGetRawReadings(AsyncWebServerRequest *request);
+    void handleGetHistory(AsyncWebServerRequest *request);
+    void handleChartsPage(AsyncWebServerRequest *request);
 
     // HTML page generators
     String generateHomePage();
     String generateProvisioningPage();
     String generateCalibrationPage();
+    String generateChartsPage();
+
+    // History management
+    void addDataPointToHistory();
 };
 
 #endif // WEB_SERVER_H

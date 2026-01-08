@@ -1,6 +1,7 @@
 #include "WebServer.h"
 #include "WiFiManager.h"
 #include "CalibrationManager.h"
+#include "charts_page.h"
 #include <WiFi.h>
 
 // Include POETResult struct definition from main
@@ -16,13 +17,74 @@ struct POETResult {
 AquariumWebServer::AquariumWebServer(WiFiManager* wifiMgr, CalibrationManager* calMgr)
     : server(80), wifiManager(wifiMgr), calibrationManager(calMgr),
       raw_temp_mC(0), raw_orp_uV(0), raw_ugs_uV(0), raw_ec_nA(0), raw_ec_uV(0),
-      temp_c(0), orp_mv(0), ph(0), ec_ms_cm(0), lastUpdate(0), dataValid(false) {
+      temp_c(0), orp_mv(0), ph(0), ec_ms_cm(0), lastUpdate(0), dataValid(false),
+      historyHead(0), historyCount(0), lastHistoryUpdate(0), ntpInitialized(false) {
+    // Initialize history buffer
+    for (int i = 0; i < HISTORY_SIZE; i++) {
+        history[i].valid = false;
+    }
 }
 
 void AquariumWebServer::begin() {
     setupRoutes();
     server.begin();
     Serial.println("Web server started on port 80");
+    initNTP();
+}
+
+void AquariumWebServer::initNTP() {
+    Serial.println("Initializing NTP...");
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
+
+    // Wait up to 5 seconds for time sync
+    int retries = 10;
+    while (retries > 0 && time(nullptr) < 100000) {
+        delay(500);
+        Serial.print(".");
+        retries--;
+    }
+    Serial.println();
+
+    time_t now = time(nullptr);
+    if (now > 100000) {
+        ntpInitialized = true;
+        Serial.println("NTP synchronized: " + String(ctime(&now)));
+    } else {
+        Serial.println("NTP sync failed - will retry later");
+    }
+}
+
+void AquariumWebServer::loop() {
+    // Check if it's time to add a data point to history
+    if (dataValid && (millis() - lastHistoryUpdate >= HISTORY_INTERVAL_MS)) {
+        addDataPointToHistory();
+        lastHistoryUpdate = millis();
+    }
+
+    // Retry NTP if not initialized and connected to WiFi
+    if (!ntpInitialized && !wifiManager->isAPMode()) {
+        static unsigned long lastNtpRetry = 0;
+        if (millis() - lastNtpRetry > 60000) { // Retry every minute
+            initNTP();
+            lastNtpRetry = millis();
+        }
+    }
+}
+
+void AquariumWebServer::addDataPointToHistory() {
+    DataPoint dp;
+    dp.timestamp = time(nullptr);
+    dp.temp_c = temp_c;
+    dp.orp_mv = orp_mv;
+    dp.ph = ph;
+    dp.ec_ms_cm = ec_ms_cm;
+    dp.valid = dataValid;
+
+    history[historyHead] = dp;
+    historyHead = (historyHead + 1) % HISTORY_SIZE;
+    if (historyCount < HISTORY_SIZE) {
+        historyCount++;
+    }
 }
 
 void AquariumWebServer::setupRoutes() {
@@ -54,6 +116,16 @@ void AquariumWebServer::setupRoutes() {
     // Calibration page
     server.on("/calibration", HTTP_GET, [this](AsyncWebServerRequest *request) {
         this->handleCalibrationPage(request);
+    });
+
+    // Charts page
+    server.on("/charts", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleChartsPage(request);
+    });
+
+    // History data API
+    server.on("/api/history", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetHistory(request);
     });
 
     // Calibration API endpoints
@@ -290,7 +362,8 @@ String AquariumWebServer::generateHomePage() {
     html += "<div class='status' style='text-align:center;'>";
     html += "✓ Connected to WiFi: <strong>" + wifiManager->getSSID() + "</strong> | ";
     html += "IP: <strong>" + wifiManager->getIPAddress() + "</strong><br>";
-    html += "<a href='/calibration' style='text-decoration:none; font-weight:bold; margin-top:10px; display:inline-block;'>🔬 Calibration</a>";
+    html += "<a href='/calibration' style='text-decoration:none; font-weight:bold; margin:10px 10px 0 0; display:inline-block;'>🔬 Calibration</a>";
+    html += "<a href='/charts' style='text-decoration:none; font-weight:bold; margin-top:10px; display:inline-block;'>📊 Charts</a>";
     html += "</div>";
 
     String calWarning = "";
@@ -469,6 +542,38 @@ String AquariumWebServer::generateProvisioningPage() {
 
 void AquariumWebServer::handleCalibrationPage(AsyncWebServerRequest *request) {
     request->send(200, "text/html", generateCalibrationPage());
+}
+
+void AquariumWebServer::handleChartsPage(AsyncWebServerRequest *request) {
+    request->send(200, "text/html", generateChartsPage());
+}
+
+void AquariumWebServer::handleGetHistory(AsyncWebServerRequest *request) {
+    JsonDocument doc;
+
+    doc["ntp_synced"] = ntpInitialized;
+    doc["count"] = historyCount;
+    doc["interval_ms"] = HISTORY_INTERVAL_MS;
+
+    JsonArray dataArray = doc["data"].to<JsonArray>();
+
+    // Read data from circular buffer in chronological order
+    int startIdx = historyCount < HISTORY_SIZE ? 0 : historyHead;
+    for (int i = 0; i < historyCount; i++) {
+        int idx = (startIdx + i) % HISTORY_SIZE;
+        if (history[idx].valid) {
+            JsonObject point = dataArray.add<JsonObject>();
+            point["t"] = (long long)history[idx].timestamp;
+            point["temp"] = serialized(String(history[idx].temp_c, 2));
+            point["orp"] = serialized(String(history[idx].orp_mv, 2));
+            point["ph"] = serialized(String(history[idx].ph, 2));
+            point["ec"] = serialized(String(history[idx].ec_ms_cm, 3));
+        }
+    }
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
 }
 
 void AquariumWebServer::handleGetCalibrationStatus(AsyncWebServerRequest *request) {
@@ -1157,3 +1262,7 @@ String AquariumWebServer::generateCalibrationPage() {
     return html;
 }
 
+
+String AquariumWebServer::generateChartsPage() {
+    return String(CHARTS_PAGE_HTML);
+}
