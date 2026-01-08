@@ -202,18 +202,70 @@ String AquariumWebServer::generateHomePage() {
     html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
     html += "<title>Aquarium Monitor</title>";
     html += "<style>";
-    html += "body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f0f8ff; }";
-    html += "h1 { color: #006494; text-align: center; }";
+    html += ":root {";
+    html += "  --bg-primary: #f0f8ff;";
+    html += "  --bg-card: #ffffff;";
+    html += "  --bg-status: #e8f5e9;";
+    html += "  --text-primary: #333333;";
+    html += "  --text-secondary: #666666;";
+    html += "  --text-tertiary: #999999;";
+    html += "  --color-primary: #006494;";
+    html += "  --color-primary-hover: #004d73;";
+    html += "  --border-color: #e0e0e0;";
+    html += "  --shadow: rgba(0,0,0,0.1);";
+    html += "  --warning-bg: #fff3cd;";
+    html += "  --warning-text: #856404;";
+    html += "  --info-bg: #d1ecf1;";
+    html += "  --info-text: #0c5460;";
+    html += "}";
+    html += "[data-theme='dark'] {";
+    html += "  --bg-primary: #0a1929;";
+    html += "  --bg-card: #132f4c;";
+    html += "  --bg-status: #1e4976;";
+    html += "  --text-primary: #e3f2fd;";
+    html += "  --text-secondary: #b0bec5;";
+    html += "  --text-tertiary: #78909c;";
+    html += "  --color-primary: #29b6f6;";
+    html += "  --color-primary-hover: #0288d1;";
+    html += "  --border-color: #1e4976;";
+    html += "  --shadow: rgba(0,0,0,0.3);";
+    html += "  --warning-bg: #7f6003;";
+    html += "  --warning-text: #fff3cd;";
+    html += "  --info-bg: #0c5460;";
+    html += "  --info-text: #d1ecf1;";
+    html += "}";
+    html += "body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: var(--bg-primary); color: var(--text-primary); transition: background 0.3s, color 0.3s; }";
+    html += "h1 { color: var(--color-primary); text-align: center; }";
+    html += ".theme-toggle { position: fixed; top: 20px; right: 20px; background: var(--bg-card); border: 2px solid var(--border-color); border-radius: 25px; padding: 8px 16px; cursor: pointer; font-size: 1.2em; box-shadow: 0 2px 5px var(--shadow); z-index: 1000; transition: all 0.3s; }";
+    html += ".theme-toggle:hover { transform: scale(1.05); }";
     html += ".sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }";
-    html += ".sensor-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }";
-    html += ".sensor-value { font-size: 2em; font-weight: bold; color: #006494; margin: 10px 0; }";
-    html += ".sensor-label { color: #666; font-size: 0.9em; }";
-    html += ".sensor-unit { color: #999; font-size: 0.8em; }";
-    html += ".status { text-align: center; padding: 10px; background: #e8f5e9; border-radius: 5px; margin: 20px 0; }";
-    html += ".warning { background: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin: 10px 0; }";
-    html += ".info { background: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 0.9em; }";
+    html += ".sensor-card { background: var(--bg-card); border-radius: 10px; padding: 20px; box-shadow: 0 2px 5px var(--shadow); border: 1px solid var(--border-color); transition: all 0.3s; }";
+    html += ".sensor-value { font-size: 2em; font-weight: bold; color: var(--color-primary); margin: 10px 0; }";
+    html += ".sensor-label { color: var(--text-secondary); font-size: 0.9em; }";
+    html += ".sensor-unit { color: var(--text-tertiary); font-size: 0.8em; }";
+    html += ".status { text-align: center; padding: 10px; background: var(--bg-status); border-radius: 5px; margin: 20px 0; }";
+    html += ".warning { background: var(--warning-bg); color: var(--warning-text); padding: 10px; border-radius: 5px; margin: 10px 0; }";
+    html += ".info { background: var(--info-bg); color: var(--info-text); padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 0.9em; }";
+    html += "a { color: var(--color-primary); }";
     html += "</style>";
     html += "<script>";
+    html += "function initTheme() {";
+    html += "  const savedTheme = localStorage.getItem('theme') || 'light';";
+    html += "  document.documentElement.setAttribute('data-theme', savedTheme);";
+    html += "  updateThemeIcon(savedTheme);";
+    html += "}";
+    html += "function toggleTheme() {";
+    html += "  const current = document.documentElement.getAttribute('data-theme') || 'light';";
+    html += "  const newTheme = current === 'light' ? 'dark' : 'light';";
+    html += "  document.documentElement.setAttribute('data-theme', newTheme);";
+    html += "  localStorage.setItem('theme', newTheme);";
+    html += "  updateThemeIcon(newTheme);";
+    html += "}";
+    html += "function updateThemeIcon(theme) {";
+    html += "  const btn = document.getElementById('themeToggle');";
+    html += "  btn.textContent = theme === 'light' ? '🌙' : '☀️';";
+    html += "  btn.title = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';";
+    html += "}";
     html += "function updateData() {";
     html += "  fetch('/api/sensors')";
     html += "    .then(response => response.json())";
@@ -227,16 +279,18 @@ String AquariumWebServer::generateHomePage() {
     html += "      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();";
     html += "    });";
     html += "}";
+    html += "initTheme();";
     html += "setInterval(updateData, 2000);";
     html += "updateData();";
     html += "</script>";
     html += "</head><body>";
+    html += "<button id='themeToggle' class='theme-toggle' onclick='toggleTheme()'>🌙</button>";
     html += "<h1>🐠 Aquarium Monitor</h1>";
 
     html += "<div class='status' style='text-align:center;'>";
     html += "✓ Connected to WiFi: <strong>" + wifiManager->getSSID() + "</strong> | ";
     html += "IP: <strong>" + wifiManager->getIPAddress() + "</strong><br>";
-    html += "<a href='/calibration' style='color:#006494; text-decoration:none; font-weight:bold; margin-top:10px; display:inline-block;'>🔬 Calibration</a>";
+    html += "<a href='/calibration' style='text-decoration:none; font-weight:bold; margin-top:10px; display:inline-block;'>🔬 Calibration</a>";
     html += "</div>";
 
     String calWarning = "";
@@ -305,17 +359,67 @@ String AquariumWebServer::generateProvisioningPage() {
     html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
     html += "<title>Aquarium Setup</title>";
     html += "<style>";
-    html += "body { font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; background: #f0f8ff; }";
-    html += "h1 { color: #006494; text-align: center; }";
-    html += ".card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 20px 0; }";
-    html += "input, select, button { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }";
-    html += "button { background: #006494; color: white; border: none; cursor: pointer; font-size: 1em; }";
-    html += "button:hover { background: #004d73; }";
-    html += ".network-item { padding: 10px; margin: 5px 0; background: #f8f9fa; border-radius: 5px; cursor: pointer; }";
-    html += ".network-item:hover { background: #e9ecef; }";
-    html += ".info { color: #666; font-size: 0.9em; text-align: center; margin: 10px 0; }";
+    html += ":root {";
+    html += "  --bg-primary: #f0f8ff;";
+    html += "  --bg-card: #ffffff;";
+    html += "  --text-primary: #333333;";
+    html += "  --text-secondary: #666666;";
+    html += "  --color-primary: #006494;";
+    html += "  --color-primary-hover: #004d73;";
+    html += "  --color-success: #28a745;";
+    html += "  --color-success-hover: #218838;";
+    html += "  --border-color: #dddddd;";
+    html += "  --shadow: rgba(0,0,0,0.1);";
+    html += "  --network-item-bg: #f8f9fa;";
+    html += "  --network-item-hover: #e9ecef;";
+    html += "}";
+    html += "[data-theme='dark'] {";
+    html += "  --bg-primary: #0a1929;";
+    html += "  --bg-card: #132f4c;";
+    html += "  --text-primary: #e3f2fd;";
+    html += "  --text-secondary: #b0bec5;";
+    html += "  --color-primary: #29b6f6;";
+    html += "  --color-primary-hover: #0288d1;";
+    html += "  --color-success: #4caf50;";
+    html += "  --color-success-hover: #45a049;";
+    html += "  --border-color: #1e4976;";
+    html += "  --shadow: rgba(0,0,0,0.3);";
+    html += "  --network-item-bg: #1e4976;";
+    html += "  --network-item-hover: #2a5a8f;";
+    html += "}";
+    html += "body { font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; background: var(--bg-primary); color: var(--text-primary); transition: background 0.3s, color 0.3s; }";
+    html += "h1 { color: var(--color-primary); text-align: center; }";
+    html += "h2 { color: var(--color-primary); }";
+    html += ".theme-toggle { position: fixed; top: 20px; right: 20px; background: var(--bg-card); border: 2px solid var(--border-color); border-radius: 25px; padding: 8px 16px; cursor: pointer; font-size: 1.2em; box-shadow: 0 2px 5px var(--shadow); z-index: 1000; transition: all 0.3s; }";
+    html += ".theme-toggle:hover { transform: scale(1.05); }";
+    html += ".card { background: var(--bg-card); border-radius: 10px; padding: 20px; box-shadow: 0 2px 5px var(--shadow); margin: 20px 0; border: 1px solid var(--border-color); }";
+    html += "input, select, button { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid var(--border-color); border-radius: 5px; box-sizing: border-box; background: var(--bg-card); color: var(--text-primary); }";
+    html += "button { background: var(--color-primary); color: white; border: none; cursor: pointer; font-size: 1em; }";
+    html += "button:hover { background: var(--color-primary-hover); }";
+    html += ".btn-success { background: var(--color-success) !important; }";
+    html += ".btn-success:hover { background: var(--color-success-hover) !important; }";
+    html += ".network-item { padding: 10px; margin: 5px 0; background: var(--network-item-bg); border-radius: 5px; cursor: pointer; border: 1px solid var(--border-color); }";
+    html += ".network-item:hover { background: var(--network-item-hover); }";
+    html += ".info { color: var(--text-secondary); font-size: 0.9em; text-align: center; margin: 10px 0; }";
     html += "</style>";
     html += "<script>";
+    html += "function initTheme() {";
+    html += "  const savedTheme = localStorage.getItem('theme') || 'light';";
+    html += "  document.documentElement.setAttribute('data-theme', savedTheme);";
+    html += "  updateThemeIcon(savedTheme);";
+    html += "}";
+    html += "function toggleTheme() {";
+    html += "  const current = document.documentElement.getAttribute('data-theme') || 'light';";
+    html += "  const newTheme = current === 'light' ? 'dark' : 'light';";
+    html += "  document.documentElement.setAttribute('data-theme', newTheme);";
+    html += "  localStorage.setItem('theme', newTheme);";
+    html += "  updateThemeIcon(newTheme);";
+    html += "}";
+    html += "function updateThemeIcon(theme) {";
+    html += "  const btn = document.getElementById('themeToggle');";
+    html += "  btn.textContent = theme === 'light' ? '🌙' : '☀️';";
+    html += "  btn.title = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';";
+    html += "}";
     html += "function scanNetworks() {";
     html += "  document.getElementById('networks').innerHTML = '<p>Scanning...</p>';";
     html += "  fetch('/scan')";
@@ -331,8 +435,10 @@ String AquariumWebServer::generateProvisioningPage() {
     html += "function selectNetwork(ssid) {";
     html += "  document.getElementById('ssid').value = ssid;";
     html += "}";
+    html += "initTheme();";
     html += "</script>";
     html += "</head><body>";
+    html += "<button id='themeToggle' class='theme-toggle' onclick='toggleTheme()'>🌙</button>";
     html += "<h1>🐠 Aquarium Setup</h1>";
 
     html += "<div class='card'>";
@@ -345,7 +451,7 @@ String AquariumWebServer::generateProvisioningPage() {
     html += "<button type='submit'>Connect to WiFi</button>";
     html += "</form>";
 
-    html += "<button onclick='scanNetworks()' style='background: #28a745; margin-top: 10px;'>Scan for Networks</button>";
+    html += "<button onclick='scanNetworks()' class='btn-success' style='margin-top: 10px;'>Scan for Networks</button>";
     html += "<div id='networks' style='margin-top: 15px;'></div>";
     html += "</div>";
 
@@ -530,35 +636,113 @@ String AquariumWebServer::generateCalibrationPage() {
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <title>Sensor Calibration</title>
     <style>
+        :root {
+            --bg-primary: #f0f8ff;
+            --bg-card: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --color-primary: #006494;
+            --color-primary-hover: #004d73;
+            --color-secondary: #6c757d;
+            --color-secondary-hover: #5a6268;
+            --color-danger: #dc3545;
+            --color-danger-hover: #c82333;
+            --border-color: #dddddd;
+            --shadow: rgba(0,0,0,0.1);
+            --status-calibrated-bg: #d4edda;
+            --status-calibrated-text: #155724;
+            --status-uncalibrated-bg: #fff3cd;
+            --status-uncalibrated-text: #856404;
+            --info-bg: #d1ecf1;
+            --info-text: #0c5460;
+            --warning-bg: #fff3cd;
+            --warning-text: #856404;
+            --success-bg: #d4edda;
+            --success-text: #155724;
+            --error-bg: #f8d7da;
+            --error-text: #721c24;
+            --readings-bg: #e9ecef;
+            --steps-bg: #f8f9fa;
+            --steps-border: #006494;
+        }
+        [data-theme='dark'] {
+            --bg-primary: #0a1929;
+            --bg-card: #132f4c;
+            --text-primary: #e3f2fd;
+            --text-secondary: #b0bec5;
+            --color-primary: #29b6f6;
+            --color-primary-hover: #0288d1;
+            --color-secondary: #90a4ae;
+            --color-secondary-hover: #78909c;
+            --color-danger: #ef5350;
+            --color-danger-hover: #e53935;
+            --border-color: #1e4976;
+            --shadow: rgba(0,0,0,0.3);
+            --status-calibrated-bg: #2e7d32;
+            --status-calibrated-text: #c8e6c9;
+            --status-uncalibrated-bg: #f57f17;
+            --status-uncalibrated-text: #fff9c4;
+            --info-bg: #0c5460;
+            --info-text: #d1ecf1;
+            --warning-bg: #7f6003;
+            --warning-text: #fff3cd;
+            --success-bg: #2e7d32;
+            --success-text: #c8e6c9;
+            --error-bg: #c62828;
+            --error-text: #ffcdd2;
+            --readings-bg: #1e4976;
+            --steps-bg: #1e4976;
+            --steps-border: #29b6f6;
+        }
         * { box-sizing: border-box; }
         body {
             font-family: Arial, sans-serif;
             max-width: 900px;
             margin: 0 auto;
             padding: 20px;
-            background: #f0f8ff;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background 0.3s, color 0.3s;
         }
-        h1 { color: #006494; text-align: center; }
-        h2 { color: #006494; margin-top: 30px; }
+        h1 { color: var(--color-primary); text-align: center; }
+        h2 { color: var(--color-primary); margin-top: 30px; }
+        h3 { color: var(--color-primary); }
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 25px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 1.2em;
+            box-shadow: 0 2px 5px var(--shadow);
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        .theme-toggle:hover { transform: scale(1.05); }
         .nav {
             text-align: center;
             margin: 20px 0;
             padding: 10px;
-            background: white;
+            background: var(--bg-card);
             border-radius: 10px;
+            border: 1px solid var(--border-color);
         }
         .nav a {
             margin: 0 10px;
-            color: #006494;
+            color: var(--color-primary);
             text-decoration: none;
             font-weight: bold;
         }
         .card {
-            background: white;
+            background: var(--bg-card);
             border-radius: 10px;
             padding: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px var(--shadow);
             margin: 20px 0;
+            border: 1px solid var(--border-color);
         }
         .status {
             padding: 10px;
@@ -566,24 +750,26 @@ String AquariumWebServer::generateCalibrationPage() {
             margin: 10px 0;
             font-weight: bold;
         }
-        .status.calibrated { background: #d4edda; color: #155724; }
-        .status.uncalibrated { background: #fff3cd; color: #856404; }
+        .status.calibrated { background: var(--status-calibrated-bg); color: var(--status-calibrated-text); }
+        .status.uncalibrated { background: var(--status-uncalibrated-bg); color: var(--status-uncalibrated-text); }
         .form-group { margin: 15px 0; }
         label {
             display: block;
             margin-bottom: 5px;
-            color: #333;
+            color: var(--text-primary);
             font-weight: bold;
         }
         input, select {
             width: 100%;
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             border-radius: 5px;
             font-size: 1em;
+            background: var(--bg-card);
+            color: var(--text-primary);
         }
         button {
-            background: #006494;
+            background: var(--color-primary);
             color: white;
             border: none;
             padding: 12px 24px;
@@ -592,62 +778,66 @@ String AquariumWebServer::generateCalibrationPage() {
             font-size: 1em;
             margin: 5px;
         }
-        button:hover { background: #004d73; }
-        button.secondary { background: #6c757d; }
-        button.secondary:hover { background: #5a6268; }
-        button.danger { background: #dc3545; }
-        button.danger:hover { background: #c82333; }
+        button:hover { background: var(--color-primary-hover); }
+        button.secondary { background: var(--color-secondary); }
+        button.secondary:hover { background: var(--color-secondary-hover); }
+        button.danger { background: var(--color-danger); }
+        button.danger:hover { background: var(--color-danger-hover); }
         .info {
-            background: #d1ecf1;
-            color: #0c5460;
+            background: var(--info-bg);
+            color: var(--info-text);
             padding: 10px;
             border-radius: 5px;
             margin: 10px 0;
             font-size: 0.9em;
         }
         .warning {
-            background: #fff3cd;
-            color: #856404;
+            background: var(--warning-bg);
+            color: var(--warning-text);
             padding: 10px;
             border-radius: 5px;
             margin: 10px 0;
         }
         .success {
-            background: #d4edda;
-            color: #155724;
+            background: var(--success-bg);
+            color: var(--success-text);
             padding: 10px;
             border-radius: 5px;
             margin: 10px 0;
         }
         .error {
-            background: #f8d7da;
-            color: #721c24;
+            background: var(--error-bg);
+            color: var(--error-text);
             padding: 10px;
             border-radius: 5px;
             margin: 10px 0;
         }
         .readings {
-            background: #e9ecef;
+            background: var(--readings-bg);
             padding: 15px;
             border-radius: 5px;
             margin: 10px 0;
+            border: 1px solid var(--border-color);
         }
         .readings div {
             margin: 5px 0;
             font-family: monospace;
+            color: var(--text-primary);
         }
         .hidden { display: none; }
         .steps {
-            background: #f8f9fa;
+            background: var(--steps-bg);
             padding: 15px;
-            border-left: 4px solid #006494;
+            border-left: 4px solid var(--steps-border);
             margin: 10px 0;
+            border-radius: 5px;
         }
         .steps ol { margin: 10px 0; padding-left: 20px; }
         .steps li { margin: 5px 0; }
     </style>
 </head>
 <body>
+    <button id='themeToggle' class='theme-toggle' onclick='toggleTheme()'>🌙</button>
     <h1>🔬 Sensor Calibration</h1>
 
     <div class='nav'>
@@ -772,6 +962,26 @@ String AquariumWebServer::generateCalibrationPage() {
     </div>
 
     <script>
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeIcon(savedTheme);
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme') || 'light';
+            const newTheme = current === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        }
+
+        function updateThemeIcon(theme) {
+            const btn = document.getElementById('themeToggle');
+            btn.textContent = theme === 'light' ? '🌙' : '☀️';
+            btn.title = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
+        }
+
         function showMessage(message, type) {
             const div = document.createElement('div');
             div.className = type;
@@ -935,6 +1145,7 @@ String AquariumWebServer::generateCalibrationPage() {
         }
 
         // Initialize on page load
+        initTheme();
         refreshReadings();
         refreshStatus();
         setInterval(refreshReadings, 5000);
