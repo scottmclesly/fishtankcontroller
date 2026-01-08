@@ -6,6 +6,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <link rel='icon' href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🐠</text></svg>'>
     <title>Aquarium Charts</title>
     <script src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'></script>
     <script src='https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js'></script>
@@ -525,10 +526,10 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                     document.getElementById('phTime').textContent = now;
                     document.getElementById('ecTime').textContent = now;
                 }
-
-                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
             } catch (error) {
                 console.error('Error fetching current data:', error);
+            } finally {
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
             }
         }
 
@@ -607,6 +608,10 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         setInterval(fetchCurrentData, 2000);
         setInterval(updateMqttStatus, 5000);
     </script>
+
+    <div style='text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.85em; background: var(--bg-card); border-radius: 10px; margin-top: 20px; border: 1px solid var(--border-color);'>
+        Scott McLelslie to my beloved wife Kate 2026. Happy new year!
+    </div>
 </body>
 </html>
 )rawliteral";

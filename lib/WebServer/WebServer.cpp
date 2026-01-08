@@ -305,6 +305,7 @@ void AquariumWebServer::updateSensorData(const POETResult& result) {
 String AquariumWebServer::generateHomePage() {
     String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+    html += "<link rel='icon' href='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><text y=\".9em\" font-size=\"90\">🐠</text></svg>'>";
     html += "<title>Aquarium Monitor</title>";
     html += "<style>";
     html += ":root {";
@@ -398,6 +399,9 @@ String AquariumWebServer::generateHomePage() {
     html += "        document.getElementById('ph').textContent = data.ph.toFixed(2);";
     html += "        document.getElementById('ec').textContent = data.ec_ms_cm.toFixed(3);";
     html += "      }";
+    html += "    })";
+    html += "    .catch(err => console.error('Update failed:', err))";
+    html += "    .finally(() => {";
     html += "      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();";
     html += "    });";
     html += "}";
@@ -418,11 +422,6 @@ String AquariumWebServer::generateHomePage() {
     html += "      }";
     html += "    });";
     html += "}";
-    html += "initTheme();";
-    html += "setInterval(updateData, 2000);";
-    html += "setInterval(updateMqttStatus, 5000);";
-    html += "updateData();";
-    html += "updateMqttStatus();";
     html += "</script>";
     html += "</head><body>";
 
@@ -499,8 +498,15 @@ String AquariumWebServer::generateHomePage() {
 
     html += "</div>";
 
-    html += "<div class='info-footer'>Auto-refresh every 2 seconds | Real-time monitoring active</div>";
+    html += "<div class='info-footer'>Auto-refresh every 2 seconds | Real-time monitoring active<br>Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
 
+    html += "<script>";
+    html += "initTheme();";
+    html += "setInterval(updateData, 2000);";
+    html += "setInterval(updateMqttStatus, 5000);";
+    html += "updateData();";
+    html += "updateMqttStatus();";
+    html += "</script>";
     html += "</body></html>";
 
     return html;
@@ -509,6 +515,7 @@ String AquariumWebServer::generateHomePage() {
 String AquariumWebServer::generateProvisioningPage() {
     String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+    html += "<link rel='icon' href='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><text y=\".9em\" font-size=\"90\">🐠</text></svg>'>";
     html += "<title>Aquarium Setup</title>";
     html += "<style>";
     html += ":root {";
@@ -609,6 +616,7 @@ String AquariumWebServer::generateProvisioningPage() {
 
     html += "<div class='info'>After connecting to WiFi, access at http://aquarium.local</div>";
     html += "<div class='info'>Current AP: " + String(WIFI_AP_SSID) + " | IP: 192.168.4.1</div>";
+    html += "<div class='info' style='margin-top: 20px;'>Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
 
     html += "</body></html>";
 
@@ -968,6 +976,7 @@ String AquariumWebServer::generateCalibrationPage() {
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <link rel='icon' href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🐠</text></svg>'>
     <title>Sensor Calibration</title>
     <style>
         :root {
@@ -1690,6 +1699,10 @@ String AquariumWebServer::generateCalibrationPage() {
         setInterval(refreshReadings, 5000);
         setInterval(refreshMqttStatus, 10000); // Update MQTT status every 10 seconds
     </script>
+
+    <div style='text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.85em;'>
+        Scott McLelslie to my beloved wife Kate 2026. Happy new year
+    </div>
 </body>
 </html>
 )rawliteral";

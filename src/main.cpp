@@ -41,6 +41,10 @@ CalibrationManager calibrationManager;
 MQTTManager mqttManager;
 AquariumWebServer* webServer = nullptr;
 
+// Timing for non-blocking sensor reads
+unsigned long lastSensorRead = 0;
+const unsigned long SENSOR_READ_INTERVAL = 5000; // 5 seconds
+
 // Function prototypes
 bool poetInit();
 bool poetMeasure(uint8_t command, POETResult &result);
@@ -54,9 +58,7 @@ void dumpDataJSON();
 void setup() {
   // Initialize serial communication
   Serial.begin(115200);
-  while (!Serial) {
-    delay(10);  // Wait for serial port to connect
-  }
+  delay(100);  // Brief delay to allow serial to initialize
 
   Serial.println("\n\n=== Aquarium Controller Starting ===");
   Serial.println("Sentron POET pH/ORP/EC/Temperature I2C Sensor");
@@ -136,99 +138,104 @@ void loop() {
   // Handle MQTT connection and publishing
   mqttManager.loop();
 
-  POETResult result;
+  // Non-blocking sensor reading - only read every SENSOR_READ_INTERVAL milliseconds
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastSensorRead >= SENSOR_READ_INTERVAL) {
+    lastSensorRead = currentMillis;
 
-  Serial.println("========================================");
-  Serial.println("Starting new measurement cycle...");
+    POETResult result;
 
-  // Perform all measurements
-  if (poetMeasure(CMD_ALL, result)) {
-    // Update web server with new data
-    if (webServer != nullptr) {
-      webServer->updateSensorData(result);
-    }
+    Serial.println("========================================");
+    Serial.println("Starting new measurement cycle...");
 
-    printPOETResult(result);
+    // Perform all measurements
+    if (poetMeasure(CMD_ALL, result)) {
+      // Update web server with new data
+      if (webServer != nullptr) {
+        webServer->updateSensorData(result);
+      }
 
-    // Calculate and display engineering units
-    Serial.println("\n--- Converted Values ---");
+      printPOETResult(result);
 
-    // Temperature
-    float temp_C = result.temp_mC / 1000.0;
-    Serial.print("Temperature: ");
-    Serial.print(temp_C, 2);
-    Serial.println(" °C");
+      // Calculate and display engineering units
+      Serial.println("\n--- Converted Values ---");
 
-    // ORP
-    float orp_mV = result.orp_uV / 1000.0;
-    Serial.print("ORP:         ");
-    Serial.print(orp_mV, 2);
-    Serial.println(" mV");
+      // Temperature
+      float temp_C = result.temp_mC / 1000.0;
+      Serial.print("Temperature: ");
+      Serial.print(temp_C, 2);
+      Serial.println(" °C");
 
-    // pH (uses calibration if available)
-    float ugs_mV = result.ugs_uV / 1000.0;
-    float pH = calibrationManager.calculatePH(ugs_mV);
-    Serial.print("pH:          ");
-    Serial.print(pH, 2);
-    if (!calibrationManager.hasValidPHCalibration()) {
-      Serial.println(" (uncalibrated - needs buffer calibration!)");
+      // ORP
+      float orp_mV = result.orp_uV / 1000.0;
+      Serial.print("ORP:         ");
+      Serial.print(orp_mV, 2);
+      Serial.println(" mV");
+
+      // pH (uses calibration if available)
+      float ugs_mV = result.ugs_uV / 1000.0;
+      float pH = calibrationManager.calculatePH(ugs_mV);
+      Serial.print("pH:          ");
+      Serial.print(pH, 2);
+      if (!calibrationManager.hasValidPHCalibration()) {
+        Serial.println(" (uncalibrated - needs buffer calibration!)");
+      } else {
+        Serial.println(" (calibrated)");
+      }
+
+      // EC (uses calibration if available)
+      float ec_mS_cm = calibrationManager.calculateEC(result.ec_nA, result.ec_uV, temp_C);
+      Serial.print("EC:          ");
+      Serial.print(ec_mS_cm, 3);
+      if (!calibrationManager.hasValidECCalibration()) {
+        Serial.println(" mS/cm (uncalibrated - needs known solution!)");
+      } else {
+        Serial.println(" mS/cm (calibrated)");
+      }
+
+      // Publish to MQTT if connected
+      SensorData sensorData;
+      sensorData.temp_c = temp_C;
+      sensorData.orp_mv = orp_mV;
+      sensorData.ph = pH;
+      sensorData.ec_ms_cm = ec_mS_cm;
+      sensorData.valid = result.valid;
+
+      if (mqttManager.publishSensorData(sensorData)) {
+        Serial.println("\nMQTT: Sensor data published");
+      } else if (mqttManager.isConnected()) {
+        Serial.println("\nMQTT: Failed to publish (will retry)");
+      }
+
+      // Calculate resistance for EC measurement
+      if (result.ec_nA != 0) {
+        float resistance_ohm = (float)result.ec_uV / (float)result.ec_nA;
+        Serial.print("EC Resistance: ");
+        Serial.print(resistance_ohm, 1);
+        Serial.println(" Ohm");
+      }
+
+      // Display WiFi status
+      if (wifiManager.isConnected()) {
+        Serial.print("\nWiFi: Connected (");
+        Serial.print(WiFi.RSSI());
+        Serial.println(" dBm)");
+      } else if (wifiManager.isAPMode()) {
+        Serial.print("\nWiFi: AP Mode - Clients: ");
+        Serial.println(WiFi.softAPgetStationNum());
+      }
+
     } else {
-      Serial.println(" (calibrated)");
-    }
-
-    // EC (uses calibration if available)
-    float ec_mS_cm = calibrationManager.calculateEC(result.ec_nA, result.ec_uV, temp_C);
-    Serial.print("EC:          ");
-    Serial.print(ec_mS_cm, 3);
-    if (!calibrationManager.hasValidECCalibration()) {
-      Serial.println(" mS/cm (uncalibrated - needs known solution!)");
-    } else {
-      Serial.println(" mS/cm (calibrated)");
-    }
-
-    // Publish to MQTT if connected
-    SensorData sensorData;
-    sensorData.temp_c = temp_C;
-    sensorData.orp_mv = orp_mV;
-    sensorData.ph = pH;
-    sensorData.ec_ms_cm = ec_mS_cm;
-    sensorData.valid = result.valid;
-
-    if (mqttManager.publishSensorData(sensorData)) {
-      Serial.println("\nMQTT: Sensor data published");
-    } else if (mqttManager.isConnected()) {
-      Serial.println("\nMQTT: Failed to publish (will retry)");
-    }
-
-    // Calculate resistance for EC measurement
-    if (result.ec_nA != 0) {
-      float resistance_ohm = (float)result.ec_uV / (float)result.ec_nA;
-      Serial.print("EC Resistance: ");
-      Serial.print(resistance_ohm, 1);
-      Serial.println(" Ohm");
-    }
-
-    // Display WiFi status
-    if (wifiManager.isConnected()) {
-      Serial.print("\nWiFi: Connected (");
-      Serial.print(WiFi.RSSI());
-      Serial.println(" dBm)");
-    } else if (wifiManager.isAPMode()) {
-      Serial.print("\nWiFi: AP Mode - Clients: ");
-      Serial.println(WiFi.softAPgetStationNum());
-    }
-
-  } else {
-    Serial.println("ERROR: Failed to read sensor!");
-    // Still update web server with invalid data
-    if (webServer != nullptr) {
-      webServer->updateSensorData(result);
+      Serial.println("ERROR: Failed to read sensor!");
+      // Still update web server with invalid data
+      if (webServer != nullptr) {
+        webServer->updateSensorData(result);
+      }
     }
   }
 
-  // Wait 5 seconds before next reading
-  Serial.println("\nWaiting 5 seconds...\n");
-  delay(5000);
+  // Small delay to prevent tight looping and allow background tasks
+  delay(10);
 }
 
 /**
@@ -277,6 +284,8 @@ bool poetMeasure(uint8_t command, POETResult &result) {
   Serial.print(delay_ms);
   Serial.println(" ms for measurement...");
 
+  // Note: This delay is required by the POET sensor hardware for measurement completion
+  // It cannot be made non-blocking without more complex state machine implementation
   delay(delay_ms);
 
   // Calculate expected number of bytes based on command
