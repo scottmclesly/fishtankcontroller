@@ -375,7 +375,7 @@ String AquariumWebServer::generateHomePage() {
     html += "</head><body>";
 
     html += "<div class='header'>";
-    html += "<h1>🐠 Aquarium Monitor</h1>";
+    html += "<h1>🐠 Kate's Aquarium #7 Monitor</h1>";
     html += "<div class='nav'>";
     html += "<a href='/'>Dashboard</a>";
     html += "<a href='/calibration'>Calibration</a>";

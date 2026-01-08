@@ -214,7 +214,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 </head>
 <body>
     <div class='header'>
-        <h1>📊 Aquarium Analytics</h1>
+        <h1>📊 Kate's Aquarium #7 Analytics</h1>
         <div class='nav'>
             <a href='/'>Dashboard</a>
             <a href='/calibration'>Calibration</a>
