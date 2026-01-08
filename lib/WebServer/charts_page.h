@@ -217,7 +217,6 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
     <div class='header'>
         <h1>📊 Kate's Aquarium #7 Analytics</h1>
         <div class='nav'>
-            <a href='/'>Dashboard</a>
             <button class='theme-toggle' onclick='window.location.href="/calibration"' title='Calibration'>⚙️</button>
         </div>
     </div>

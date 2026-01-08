@@ -198,9 +198,12 @@ void AquariumWebServer::setupRoutes() {
 
 void AquariumWebServer::handleRoot(AsyncWebServerRequest *request) {
     if (wifiManager->isAPMode()) {
-        request->send(200, "text/html", generateProvisioningPage());
+        String html = generateProvisioningPage();
+        Serial.printf("Provisioning page length: %d bytes\n", html.length());
+        request->send(200, "text/html", html);
     } else {
-        request->send(200, "text/html", generateHomePage());
+        // Redirect to charts page as the main interface
+        handleChartsPage(request);
     }
 }
 
@@ -303,7 +306,9 @@ void AquariumWebServer::updateSensorData(const POETResult& result) {
 }
 
 String AquariumWebServer::generateHomePage() {
-    String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
+    String html;
+    html.reserve(16000);  // Pre-allocate memory for large HTML page (increased from 12000)
+    html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
     html += "<link rel='icon' href='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><text y=\".9em\" font-size=\"90\">🐠</text></svg>'>";
     html += "<title>Aquarium Monitor</title>";
@@ -377,18 +382,18 @@ String AquariumWebServer::generateHomePage() {
     html += "  const savedTheme = localStorage.getItem('theme') || 'dark';";
     html += "  document.documentElement.setAttribute('data-theme', savedTheme);";
     html += "  updateThemeIcon(savedTheme);";
-    html += "}";
+    html += "}\n";
     html += "function toggleTheme() {";
     html += "  const current = document.documentElement.getAttribute('data-theme') || 'dark';";
     html += "  const newTheme = current === 'light' ? 'dark' : 'light';";
     html += "  document.documentElement.setAttribute('data-theme', newTheme);";
     html += "  localStorage.setItem('theme', newTheme);";
     html += "  updateThemeIcon(newTheme);";
-    html += "}";
+    html += "}\n";
     html += "function updateThemeIcon(theme) {";
     html += "  // Theme toggle button removed from this page";
     html += "  // Theme is now managed in calibration settings";
-    html += "}";
+    html += "}\n";
     html += "function updateData() {";
     html += "  fetch('/api/sensors')";
     html += "    .then(response => response.json())";
@@ -404,7 +409,7 @@ String AquariumWebServer::generateHomePage() {
     html += "    .finally(() => {";
     html += "      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();";
     html += "    });";
-    html += "}";
+    html += "}\n";
     html += "function updateMqttStatus() {";
     html += "  fetch('/api/mqtt/status')";
     html += "    .then(response => response.json())";
@@ -423,7 +428,8 @@ String AquariumWebServer::generateHomePage() {
     html += "    });";
     html += "}";
     html += "</script>";
-    html += "</head><body>";
+    html += "</head>";
+    html += "<body>";
 
     html += "<div class='header'>";
     html += "<h1>🐠 " + getUnitName() + " Monitor</h1>";
@@ -498,20 +504,23 @@ String AquariumWebServer::generateHomePage() {
 
     html += "<div class='info-footer'>Auto-refresh every 2 seconds | Real-time monitoring active<br>Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
 
-    html += "<script>";
-    html += "initTheme();";
-    html += "setInterval(updateData, 2000);";
-    html += "setInterval(updateMqttStatus, 5000);";
-    html += "updateData();";
-    html += "updateMqttStatus();";
+    html += "<script>\n";
+    html += "initTheme();\n";
+    html += "setInterval(updateData, 2000);\n";
+    html += "setInterval(updateMqttStatus, 5000);\n";
+    html += "updateData();\n";
+    html += "updateMqttStatus();\n";
     html += "</script>";
-    html += "</body></html>";
+    html += "</body>";
+    html += "</html>";
 
     return html;
 }
 
 String AquariumWebServer::generateProvisioningPage() {
-    String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
+    String html;
+    html.reserve(8000);  // Pre-allocate memory
+    html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
     html += "<link rel='icon' href='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><text y=\".9em\" font-size=\"90\">🐠</text></svg>'>";
     html += "<title>Aquarium Setup</title>";
@@ -594,7 +603,8 @@ String AquariumWebServer::generateProvisioningPage() {
     html += "}";
     html += "initTheme();";
     html += "</script>";
-    html += "</head><body>";
+    html += "</head>";
+    html += "<body>";
     html += "<button id='themeToggle' class='theme-toggle' onclick='toggleTheme()'>🌙</button>";
     html += "<h1>🐠 Aquarium Setup</h1>";
 
@@ -616,7 +626,8 @@ String AquariumWebServer::generateProvisioningPage() {
     html += "<div class='info'>Current AP: " + String(WIFI_AP_SSID) + " | IP: 192.168.4.1</div>";
     html += "<div class='info' style='margin-top: 20px;'>Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
 
-    html += "</body></html>";
+    html += "</body>";
+    html += "</html>";
 
     return html;
 }
@@ -1195,8 +1206,7 @@ String AquariumWebServer::generateCalibrationPage() {
     <div class='header'>
         <h1>🔬 Sensor Calibration</h1>
         <div class='nav'>
-            <a href='/'>Dashboard</a>
-            <a href='/charts'>Charts</a>
+            <a href='/'>Home</a>
             <button onclick='exportCSV()' title='Export data as CSV'>CSV</button>
             <button onclick='exportJSON()' title='Export data as JSON'>JSON</button>
         </div>
