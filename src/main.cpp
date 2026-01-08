@@ -44,8 +44,6 @@ bool poetInit();
 bool poetMeasure(uint8_t command, POETResult &result);
 int32_t readInt32LE();
 void printPOETResult(const POETResult &result);
-float calculatePH(int32_t ugs_uV, float buffer_pH = 7.0, float buffer_ugs_mV = 0.0);
-float calculateEC(int32_t ec_nA, int32_t ec_uV, float cell_constant = 1.0);
 
 void setup() {
   // Initialize serial communication
@@ -315,43 +313,4 @@ void printPOETResult(const POETResult &result) {
   Serial.println(result.ec_nA);
   Serial.print("ec_uV:    ");
   Serial.println(result.ec_uV);
-}
-
-/**
- * Calculate pH from gate-source voltage
- * @param ugs_uV Gate-source voltage in microvolts
- * @param buffer_pH Known pH of buffer solution used for calibration (default 7.0)
- * @param buffer_ugs_mV Gate-source voltage in millivolts when measured in buffer
- * @return Calculated pH value
- *
- * Note: Requires calibration in known buffer solution for accurate results
- * Formula: pH = buffer_pH + (sample_ugs_mV - buffer_ugs_mV) / 52
- * Sensitivity: ~52 mV/pH
- */
-float calculatePH(int32_t ugs_uV, float buffer_pH, float buffer_ugs_mV) {
-  float ugs_mV = ugs_uV / 1000.0;
-  float pH = buffer_pH + (ugs_mV - buffer_ugs_mV) / 52.0;
-  return pH;
-}
-
-/**
- * Calculate EC (Electrical Conductivity) from sensor measurements
- * @param ec_nA Sensor current in nano-amps
- * @param ec_uV Excitation voltage in micro-volts
- * @param cell_constant Cell constant in /cm (requires calibration)
- * @return Conductivity in mS/cm
- *
- * Note: Requires calibration in known conductivity solution
- * Example: 0.01M KCl solution = 1.41 mS/cm @ 25°C
- */
-float calculateEC(int32_t ec_nA, int32_t ec_uV, float cell_constant) {
-  if (ec_nA == 0) return 0.0;
-
-  // Calculate resistance: R = V / I
-  float resistance_ohm = (float)ec_uV / (float)ec_nA;
-
-  // Calculate conductivity: EC = cell_constant / resistance
-  float ec_mS_cm = (cell_constant / resistance_ohm) * 1000.0;
-
-  return ec_mS_cm;
 }
