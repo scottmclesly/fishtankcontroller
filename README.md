@@ -2,7 +2,7 @@
 
 Wireless aquarium controller (freshwater / saltwater) built around the **Sentron POET pH / ORP / EC / Temperature over I2C** sensor, plus additional sensors and relay/driver outputs for tank equipment.
 
-> **Status:** WIP
+> **Status:** Working prototype - WiFi connectivity, sensor monitoring, and web UI operational
 
 ---
 
@@ -156,31 +156,83 @@ If you want a safe default today: **ESP32-S3**.
 
 ### Build/run
 - **Build system:** PlatformIO
-- **Framework:** 
-  - **ESP-IDF (recommended)** for long-term robustness, networking, and OTA
-  - Arduino framework is acceptable for faster prototyping
+- **Framework:**
+  - **Arduino framework** (current implementation for rapid prototyping)
+  - **ESP-IDF (future)** for long-term robustness, networking, and OTA
+
+**Build commands:**
+```bash
+# Build firmware
+pio run
+
+# Build and upload to device
+pio run -t upload
+
+# Monitor serial output
+pio device monitor
+
+# Build + upload + monitor (common workflow)
+pio run -t upload && pio device monitor
+```
+
+**Current target:** `seeed_xiao_esp32c3` (ESP32-C3 board)
 
 ---
 
 ## Web UI
 The controller hosts a Web UI so you can manage it from any device on the same network (phone/tablet/laptop) without installing anything.
 
-### Scope (initial)
-- Live dashboard (readings + health)
+### Current Implementation
+The device now includes a fully functional web interface with:
+
+**Live Sensor Dashboard:**
+- Real-time display of Temperature (°C), ORP (mV), pH, and EC (mS/cm)
+- Auto-refresh every 2 seconds via background polling
+- Responsive design works on desktop, tablet, and mobile
+- Visual warnings for uncalibrated sensors
+- WiFi connection status and signal strength
+
+**WiFi Provisioning:**
+- Automatic fallback to AP mode when no credentials stored or connection fails
+- Network scanning to discover available WiFi networks
+- Simple web-based credential entry
+- Credentials stored in ESP32 NVS (non-volatile storage)
+- Automatic retry logic with configurable timeout
+
+**API Endpoints:**
+- `GET /` - Main dashboard (sensor view or provisioning based on mode)
+- `GET /api/sensors` - JSON sensor data for programmatic access
+- `GET /setup` - Provisioning configuration page
+- `POST /save-wifi` - Save WiFi credentials
+- `GET /scan` - Scan for available networks
+
+### Access Methods
+- **mDNS:** `http://aquarium.local` (when connected to WiFi)
+- **Direct IP:** `http://<device-ip>` (shown in serial output)
+- **Provisioning AP:** `http://192.168.4.1` (when in AP mode)
+
+### Provisioning Process
+**First boot or WiFi failure:**
+1. Device creates access point:
+   - **SSID:** `AquariumSetup`
+   - **Password:** `aquarium123`
+2. Connect to this AP with phone/laptop
+3. Navigate to `http://192.168.4.1`
+4. Scan for networks or manually enter credentials
+5. Submit credentials - device saves and restarts
+6. Device connects to your WiFi network
+7. Access via `http://aquarium.local` or device IP
+
+**Credential Storage:**
+- WiFi credentials stored in ESP32 NVS (persistent across reboots)
+- Up to 3 connection retry attempts with 10-second timeout per attempt
+- Graceful fallback to AP mode on connection failure
+
+### Future Scope
 - Output controls (manual override)
-- Config pages (Wi‑Fi, MQTT, sampling rate, alarms)
+- Config pages (MQTT, sampling rate, alarms)
 - Calibration workflows (pH / EC)
-
-### Implementation
-- **Simple static HTML + JS** (no framework/build step)
-- Served directly from the device (LittleFS/SPIFFS)
-- REST for configuration, WebSocket for live updates
-- mDNS enabled (`http://aquarium.local`)
-
-### Provisioning
-- On first boot or Wi‑Fi failure, the device starts an AP and captive portal
-- Portal collects Wi‑Fi credentials and optional MQTT settings
-- Device reboots/applies settings and joins the LAN
+- WebSocket for live updates (currently using polling)
 
 
 ---
@@ -235,42 +287,94 @@ Normalized telemetry payload (example):
 ---
 
 ## Installation
-### 1) Hardware
-- Wire sensor and verify I2C bus stability.
-- Add output drivers and verify isolation and fusing.
 
-### 2) First boot provisioning (AP captive portal)
-- Power on the device.
-- Join the setup AP (e.g., `Aquarium-Setup-XXXX`).
-- Complete the captive portal:
-  - connect to Wi‑Fi
-  - set device name
-  - (optional) configure MQTT
-- After it joins your LAN, open `http://aquarium.local` (or the device IP).
+### Prerequisites
+- PlatformIO installed (via VS Code extension or CLI)
+- POET sensor connected via I2C (address `0x1F`)
+- ESP32-C3 board (Seeed XIAO ESP32-C3 or compatible)
 
-### 3) Firmware
-- Flash the MCU using PlatformIO.
-- Confirm the sensor is detected and readings update.
+### 1) Hardware Setup
+- Wire POET sensor to ESP32 I2C pins (SDA/SCL)
+- Connect sensor power (3.3V)
+- Verify I2C connections and pull-ups
+- Add output drivers (future) and verify isolation and fusing
 
-### 4) UI access
-- Open the Web UI in a browser **or**
-- Install the Flutter app and connect over the same LAN.
+### 2) Firmware Flash
+```bash
+# Clone repository and navigate to project
+cd fishtankcontroller
+
+# Build firmware
+pio run
+
+# Upload to device (device must be connected via USB)
+pio run -t upload
+
+# Monitor serial output to verify
+pio device monitor
+```
+
+### 3) WiFi Provisioning (First Boot)
+On first boot, the device will start in provisioning mode:
+
+1. **Connect to AP:**
+   - SSID: `AquariumSetup`
+   - Password: `aquarium123`
+
+2. **Configure WiFi:**
+   - Open browser to `http://192.168.4.1`
+   - Click "Scan for Networks" or manually enter SSID
+   - Enter WiFi password
+   - Click "Connect to WiFi"
+
+3. **Device restarts and connects:**
+   - Watch serial monitor for connection status
+   - Note the assigned IP address
+   - Device is now accessible via:
+     - `http://aquarium.local` (mDNS)
+     - `http://<device-ip>`
+
+### 4) Verify Sensor Operation
+- Open web dashboard
+- Verify sensor readings update every 5 seconds
+- Check serial output for detailed sensor data
+- Note calibration warnings (pH and EC require calibration)
+
+### 5) UI Access
+**Current:**
+- Web UI via browser at `http://aquarium.local`
+
+**Future:**
+- Flutter app for iOS/Android/Desktop
 
 ---
 
 ---
 
 ## Configuration
-- Wi‑Fi: SSID / password (via captive portal on first boot)
-- Hostname / mDNS name (e.g., `aquarium.local`)
+
+### Current Configuration Options
+**WiFi (via Web UI):**
+- SSID / password (provisioning portal on first boot)
+- Stored in NVS (non-volatile storage)
+- To reset: clear NVS via serial or reflash firmware
+
+**Network:**
+- Hostname / mDNS name: `aquarium` (default, accessible via `http://aquarium.local`)
+- AP credentials (when in provisioning mode):
+  - SSID: `AquariumSetup`
+  - Password: `aquarium123`
+
+**Sensor Polling:**
+- Current: 5-second interval (hardcoded in main loop)
+- Future: Configurable via web interface
+
+### Planned Configuration Options
 - MQTT: broker host/port, auth, TLS, base topic
-- Sampling rate: TBD
+- Sampling rate: User-configurable interval
 - Output mapping: names, GPIOs, safety defaults
-- Alerts: thresholds for pH / ORP / EC / temperature
-- MQTT: broker host/port, auth, TLS, base topic
-- Sampling rate: TBD
-- Output mapping: names, GPIOs, safety defaults
-- Alerts: thresholds for pH/ORP/EC/temp
+- Alerts: thresholds for pH/ORP/EC/temperature
+- Calibration values: pH offset/slope, EC cell constant
 
 ---
 
@@ -296,16 +400,76 @@ Normalized telemetry payload (example):
 ---
 
 ## Roadmap
-- [ ] Decide MCU + firmware framework (ESP32-S3 + ESP-IDF recommended)
-- [ ] POET driver + raw reads
-- [ ] REST API + WebSocket live feed
-- [ ] On-device Web UI MVP
+- [x] Decide MCU + firmware framework (ESP32-C3 + Arduino for prototyping)
+- [x] POET driver + raw reads
+- [x] WiFi connection stack with credential storage and provisioning AP
+- [x] On-device Web UI MVP for sensor monitoring
+- [ ] REST API expansion (configuration, calibration endpoints)
+- [ ] WebSocket live feed (currently using polling)
 - [ ] Calibration storage + workflow
 - [ ] MQTT publisher + command topics
 - [ ] Home Assistant MQTT Discovery
 - [ ] Flutter dashboard MVP
 - [ ] Output control with failsafes
 - [ ] Logging (flash/SD/remote)
+
+---
+
+## Troubleshooting
+
+### WiFi Connection Issues
+**Device stuck in AP mode:**
+- Verify WiFi credentials are correct
+- Check WiFi signal strength (device may be too far from router)
+- Ensure WiFi network is 2.4GHz (ESP32-C3 doesn't support 5GHz)
+- Check router logs to see if device MAC is being blocked
+
+**Cannot access `http://aquarium.local`:**
+- mDNS may not work on all networks/routers
+- Use direct IP address instead (shown in serial monitor)
+- On Windows, install Bonjour service for mDNS support
+- On Android, mDNS support varies by browser (Chrome usually works)
+
+**Forgot WiFi credentials / need to reset:**
+- Reflash firmware to clear NVS
+- Or add a reset button/command in future version
+
+### Sensor Issues
+**"Failed to initialize POET sensor":**
+- Check I2C wiring (SDA/SCL swapped?)
+- Verify sensor power (3.3V, adequate current)
+- Check I2C address (`0x1F`) with I2C scanner
+- Verify pull-up resistors on SDA/SCL lines
+- Check I2C bus speed (should be ≤400kHz)
+
+**Sensor readings seem wrong:**
+- pH and EC require calibration (see Calibration section)
+- Temperature readings should be reasonably accurate without calibration
+- ORP readings are raw millivolts (reference electrode dependent)
+
+### Web Interface Issues
+**Page won't load:**
+- Check device is powered on and connected to WiFi
+- Verify you're on the same network as the device
+- Try direct IP instead of mDNS hostname
+- Clear browser cache
+
+**Sensor data shows "--" or doesn't update:**
+- Check serial monitor for sensor errors
+- Verify POET sensor is properly initialized
+- Web interface will still load even if sensor fails
+
+### Build/Upload Issues
+**PlatformIO build errors:**
+- Ensure PlatformIO is up to date
+- Try `pio pkg update` to update libraries
+- Clean build: `pio run -t clean`
+
+**Upload fails:**
+- Check USB cable (some are charge-only)
+- Verify correct COM port selected
+- Try putting ESP32-C3 in bootloader mode (hold BOOT button while connecting)
+- Check drivers for USB-to-serial chip
 
 ---
 

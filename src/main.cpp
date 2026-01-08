@@ -1,5 +1,8 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <ESPmDNS.h>
+#include "WiFiManager.h"
+#include "WebServer.h"
 
 // POET Sensor I2C Configuration
 #define POET_I2C_ADDR 0x1F
@@ -30,6 +33,10 @@ struct POETResult {
   bool valid;        // Indicates if reading was successful
 };
 
+// Global objects
+WiFiManager wifiManager;
+AquariumWebServer* webServer = nullptr;
+
 // Function prototypes
 bool poetInit();
 bool poetMeasure(uint8_t command, POETResult &result);
@@ -45,9 +52,39 @@ void setup() {
     delay(10);  // Wait for serial port to connect
   }
 
-  Serial.println("\n\n=== POET Sensor Test ===");
+  Serial.println("\n\n=== Aquarium Controller Starting ===");
   Serial.println("Sentron POET pH/ORP/EC/Temperature I2C Sensor");
   Serial.println("I2C Address: 0x1F");
+  Serial.println();
+
+  // Initialize WiFi Manager
+  bool wifiConnected = wifiManager.begin();
+
+  // Initialize mDNS
+  if (MDNS.begin("aquarium")) {
+    Serial.println("mDNS responder started: http://aquarium.local");
+  } else {
+    Serial.println("Error setting up mDNS responder!");
+  }
+
+  // Initialize Web Server
+  webServer = new AquariumWebServer(&wifiManager);
+  webServer->begin();
+
+  if (wifiConnected) {
+    Serial.println("\n=== System Ready ===");
+    Serial.println("Access web interface at:");
+    Serial.print("  http://");
+    Serial.println(wifiManager.getIPAddress());
+    Serial.println("  http://aquarium.local");
+  } else {
+    Serial.println("\n=== Provisioning Mode Active ===");
+    Serial.println("Connect to WiFi AP and configure:");
+    Serial.println("  SSID: " WIFI_AP_SSID);
+    Serial.println("  Password: " WIFI_AP_PASSWORD);
+    Serial.println("  URL: http://192.168.4.1");
+  }
+
   Serial.println();
 
   // Initialize I2C
@@ -57,12 +94,11 @@ void setup() {
     Serial.println("  - I2C connections (SDA/SCL)");
     Serial.println("  - Sensor power (3.3V)");
     Serial.println("  - I2C address (0x1F)");
-    while (1) {
-      delay(1000);
-    }
+    Serial.println("\nWeb server will still run, but sensor data will be unavailable.");
+  } else {
+    Serial.println("POET sensor initialized successfully!");
   }
 
-  Serial.println("POET sensor initialized successfully!");
   Serial.println();
 }
 
@@ -74,6 +110,11 @@ void loop() {
 
   // Perform all measurements
   if (poetMeasure(CMD_ALL, result)) {
+    // Update web server with new data
+    if (webServer != nullptr) {
+      webServer->updateSensorData(result);
+    }
+
     printPOETResult(result);
 
     // Calculate and display engineering units
@@ -111,8 +152,22 @@ void loop() {
       Serial.println(" Ohm");
     }
 
+    // Display WiFi status
+    if (wifiManager.isConnected()) {
+      Serial.print("\nWiFi: Connected (");
+      Serial.print(WiFi.RSSI());
+      Serial.println(" dBm)");
+    } else if (wifiManager.isAPMode()) {
+      Serial.print("\nWiFi: AP Mode - Clients: ");
+      Serial.println(WiFi.softAPgetStationNum());
+    }
+
   } else {
     Serial.println("ERROR: Failed to read sensor!");
+    // Still update web server with invalid data
+    if (webServer != nullptr) {
+      webServer->updateSensorData(result);
+    }
   }
 
   // Wait 5 seconds before next reading
