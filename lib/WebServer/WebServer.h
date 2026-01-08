@@ -43,6 +43,11 @@ public:
     // Get server instance
     AsyncWebServer* getServer() { return &server; }
 
+    // Get history data (for console dumps)
+    const DataPoint* getHistory() const { return history; }
+    int getHistoryCount() const { return historyCount; }
+    int getHistoryHead() const { return historyHead; }
+
 private:
     AsyncWebServer server;
     WiFiManager* wifiManager;
@@ -95,6 +100,8 @@ private:
     void handleGetRawReadings(AsyncWebServerRequest *request);
     void handleGetHistory(AsyncWebServerRequest *request);
     void handleChartsPage(AsyncWebServerRequest *request);
+    void handleExportCSV(AsyncWebServerRequest *request);
+    void handleExportJSON(AsyncWebServerRequest *request);
 
     // HTML page generators
     String generateHomePage();

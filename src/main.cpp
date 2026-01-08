@@ -44,6 +44,10 @@ bool poetInit();
 bool poetMeasure(uint8_t command, POETResult &result);
 int32_t readInt32LE();
 void printPOETResult(const POETResult &result);
+void processSerialCommands();
+void printHelp();
+void dumpDataCSV();
+void dumpDataJSON();
 
 void setup() {
   // Initialize serial communication
@@ -55,6 +59,8 @@ void setup() {
   Serial.println("\n\n=== Aquarium Controller Starting ===");
   Serial.println("Sentron POET pH/ORP/EC/Temperature I2C Sensor");
   Serial.println("I2C Address: 0x1F");
+  Serial.println();
+  Serial.println("Type 'help' for available console commands");
   Serial.println();
 
   // Initialize Calibration Manager
@@ -109,6 +115,9 @@ void setup() {
 }
 
 void loop() {
+  // Handle serial commands (non-blocking)
+  processSerialCommands();
+
   // Handle web server periodic tasks (history updates, NTP retries)
   if (webServer != nullptr) {
     webServer->loop();
@@ -318,4 +327,271 @@ void printPOETResult(const POETResult &result) {
   Serial.println(result.ec_nA);
   Serial.print("ec_uV:    ");
   Serial.println(result.ec_uV);
+}
+
+/**
+ * Process serial commands (non-blocking)
+ */
+void processSerialCommands() {
+  static String commandBuffer = "";
+
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+
+    if (c == '\n' || c == '\r') {
+      if (commandBuffer.length() > 0) {
+        commandBuffer.trim();
+        commandBuffer.toLowerCase();
+
+        Serial.println("\n>>> Command: " + commandBuffer);
+
+        if (commandBuffer == "help" || commandBuffer == "?") {
+          printHelp();
+        } else if (commandBuffer == "dump csv" || commandBuffer == "dump" || commandBuffer == "csv") {
+          dumpDataCSV();
+        } else if (commandBuffer == "dump json" || commandBuffer == "json") {
+          dumpDataJSON();
+        } else if (commandBuffer == "status") {
+          Serial.println("\n=== System Status ===");
+          Serial.print("WiFi: ");
+          if (wifiManager.isConnected()) {
+            Serial.print("Connected to ");
+            Serial.print(wifiManager.getSSID());
+            Serial.print(" (");
+            Serial.print(WiFi.RSSI());
+            Serial.println(" dBm)");
+            Serial.print("IP: ");
+            Serial.println(wifiManager.getIPAddress());
+          } else if (wifiManager.isAPMode()) {
+            Serial.print("AP Mode - Clients: ");
+            Serial.println(WiFi.softAPgetStationNum());
+          } else {
+            Serial.println("Disconnected");
+          }
+          Serial.print("pH Calibration: ");
+          Serial.println(calibrationManager.hasValidPHCalibration() ? "Calibrated" : "Not calibrated");
+          Serial.print("EC Calibration: ");
+          Serial.println(calibrationManager.hasValidECCalibration() ? "Calibrated" : "Not calibrated");
+          Serial.print("Uptime: ");
+          Serial.print(millis() / 1000);
+          Serial.println(" seconds");
+        } else if (commandBuffer == "clear") {
+          // Clear the serial terminal
+          Serial.println("\033[2J\033[H");
+        } else {
+          Serial.println("Unknown command. Type 'help' for available commands.");
+        }
+
+        commandBuffer = "";
+      }
+    } else {
+      commandBuffer += c;
+    }
+  }
+}
+
+/**
+ * Print help message with available commands
+ */
+void printHelp() {
+  Serial.println("\n=== Available Console Commands ===");
+  Serial.println("help, ?         - Show this help message");
+  Serial.println("status          - Show system status");
+  Serial.println("dump, csv       - Dump all captured data in CSV format");
+  Serial.println("dump json       - Dump all captured data in JSON format");
+  Serial.println("clear           - Clear terminal screen");
+  Serial.println("\nData dump formats:");
+  Serial.println("  CSV  - Best for Excel, spreadsheets, data analysis tools");
+  Serial.println("  JSON - Best for programmatic processing, APIs");
+  Serial.println("=====================================\n");
+}
+
+/**
+ * Dump all captured data in CSV format
+ */
+void dumpDataCSV() {
+  if (webServer == nullptr) {
+    Serial.println("ERROR: Web server not initialized");
+    return;
+  }
+
+  int historyCount = webServer->getHistoryCount();
+  int historyHead = webServer->getHistoryHead();
+  const DataPoint* history = webServer->getHistory();
+
+  Serial.println("\n=== Data Dump (CSV Format) ===");
+  Serial.println("# Aquarium Monitor Data Export");
+  Serial.print("# Device: Kate's Aquarium #7 | Export time: ");
+
+  time_t now = time(nullptr);
+  if (now > 100000) {
+    Serial.println(ctime(&now));
+  } else {
+    Serial.print(millis() / 1000);
+    Serial.println(" seconds since boot (NTP not synced)");
+  }
+
+  Serial.print("# WiFi: ");
+  Serial.println(wifiManager.getSSID());
+  Serial.print("# pH Calibration: ");
+  Serial.println(calibrationManager.hasValidPHCalibration() ? "Yes" : "No");
+  Serial.print("# EC Calibration: ");
+  Serial.println(calibrationManager.hasValidECCalibration() ? "Yes" : "No");
+  Serial.print("# Data Points: ");
+  Serial.println(historyCount);
+  Serial.print("# Interval: 5 seconds");
+  Serial.println("\n#");
+
+  // CSV Header
+  Serial.println("Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,Valid");
+
+  // Output data in chronological order
+  int startIdx = historyCount < HISTORY_SIZE ? 0 : historyHead;
+  int validCount = 0;
+
+  for (int i = 0; i < historyCount; i++) {
+    int idx = (startIdx + i) % HISTORY_SIZE;
+
+    if (history[idx].valid) {
+      validCount++;
+
+      // Format timestamp
+      time_t ts = history[idx].timestamp;
+      if (ts > 100000) {
+        // Convert timestamp to readable format
+        struct tm* timeinfo = localtime(&ts);
+        char timeStr[32];
+        strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeinfo);
+        Serial.print(timeStr);
+      } else {
+        Serial.print("N/A");
+      }
+      Serial.print(",");
+
+      // Unix timestamp
+      Serial.print(history[idx].timestamp);
+      Serial.print(",");
+
+      // Temperature
+      Serial.print(history[idx].temp_c, 2);
+      Serial.print(",");
+
+      // ORP
+      Serial.print(history[idx].orp_mv, 2);
+      Serial.print(",");
+
+      // pH
+      Serial.print(history[idx].ph, 2);
+      Serial.print(",");
+
+      // EC
+      Serial.print(history[idx].ec_ms_cm, 3);
+      Serial.print(",");
+
+      // Valid flag
+      Serial.println("true");
+    }
+  }
+
+  Serial.println("#");
+  Serial.print("# Total data points exported: ");
+  Serial.println(validCount);
+  Serial.println("=== End of CSV Data ===\n");
+}
+
+/**
+ * Dump all captured data in JSON format
+ */
+void dumpDataJSON() {
+  if (webServer == nullptr) {
+    Serial.println("ERROR: Web server not initialized");
+    return;
+  }
+
+  int historyCount = webServer->getHistoryCount();
+  int historyHead = webServer->getHistoryHead();
+  const DataPoint* history = webServer->getHistory();
+
+  Serial.println("\n=== Data Dump (JSON Format) ===");
+
+  time_t now = time(nullptr);
+
+  Serial.println("{");
+  Serial.println("  \"device\": {");
+  Serial.println("    \"name\": \"Kate's Aquarium #7\",");
+  Serial.print("    \"export_timestamp\": ");
+  if (now > 100000) {
+    Serial.print(now);
+    Serial.println(",");
+  } else {
+    Serial.println("null,");
+  }
+  Serial.print("    \"uptime_seconds\": ");
+  Serial.print(millis() / 1000);
+  Serial.println(",");
+  Serial.print("    \"wifi_ssid\": \"");
+  Serial.print(wifiManager.getSSID());
+  Serial.println("\",");
+  Serial.print("    \"wifi_ip\": \"");
+  Serial.print(wifiManager.getIPAddress());
+  Serial.println("\",");
+  Serial.print("    \"ph_calibrated\": ");
+  Serial.print(calibrationManager.hasValidPHCalibration() ? "true" : "false");
+  Serial.println(",");
+  Serial.print("    \"ec_calibrated\": ");
+  Serial.print(calibrationManager.hasValidECCalibration() ? "true" : "false");
+  Serial.println(",");
+  Serial.print("    \"data_points\": ");
+  Serial.print(historyCount);
+  Serial.println(",");
+  Serial.println("    \"interval_seconds\": 5");
+  Serial.println("  },");
+  Serial.println("  \"data\": [");
+
+  // Output data in chronological order
+  int startIdx = historyCount < HISTORY_SIZE ? 0 : historyHead;
+  int validCount = 0;
+
+  for (int i = 0; i < historyCount; i++) {
+    int idx = (startIdx + i) % HISTORY_SIZE;
+
+    if (history[idx].valid) {
+      if (validCount > 0) {
+        Serial.println(",");
+      }
+      validCount++;
+
+      Serial.println("    {");
+      Serial.print("      \"timestamp\": ");
+      Serial.print(history[idx].timestamp);
+      Serial.println(",");
+      Serial.print("      \"temp_c\": ");
+      Serial.print(history[idx].temp_c, 2);
+      Serial.println(",");
+      Serial.print("      \"orp_mv\": ");
+      Serial.print(history[idx].orp_mv, 2);
+      Serial.println(",");
+      Serial.print("      \"ph\": ");
+      Serial.print(history[idx].ph, 2);
+      Serial.println(",");
+      Serial.print("      \"ec_ms_cm\": ");
+      Serial.print(history[idx].ec_ms_cm, 3);
+      Serial.println(",");
+      Serial.println("      \"valid\": true");
+      Serial.print("    }");
+    }
+  }
+
+  if (validCount > 0) {
+    Serial.println();
+  }
+
+  Serial.println("  ],");
+  Serial.print("  \"summary\": {");
+  Serial.print("\"total_points\": ");
+  Serial.print(validCount);
+  Serial.println("}");
+  Serial.println("}");
+
+  Serial.println("=== End of JSON Data ===\n");
 }

@@ -18,6 +18,7 @@ Wireless aquarium controller (freshwater / saltwater) built around the **Sentron
 - [Data + integrations](#data--integrations)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Console Commands](#console-commands)
 - [Calibration](#calibration)
 - [Safety + electrical notes](#safety--electrical-notes)
 - [Roadmap](#roadmap)
@@ -375,6 +376,122 @@ On first boot, the device will start in provisioning mode:
 - Output mapping: names, GPIOs, safety defaults
 - Alerts: thresholds for pH/ORP/EC/temperature
 - Calibration values: pH offset/slope, EC cell constant
+
+---
+
+## Console Commands
+
+The firmware includes a serial console command interface for debugging and data analysis. Connect via serial monitor (115200 baud) and type commands.
+
+### Available Commands
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `help` | `?` | Show help message with all available commands |
+| `status` | - | Display system status (WiFi, calibration, uptime) |
+| `dump` | `csv` | Export all captured data in CSV format |
+| `dump json` | `json` | Export all captured data in JSON format |
+| `clear` | - | Clear the terminal screen |
+
+### Data Export Formats
+
+#### CSV Format
+Best for analysis in Excel, Google Sheets, or data analysis tools like Python/R.
+
+```csv
+# Aquarium Monitor Data Export
+# Device: Kate's Aquarium #7 | Export time: Wed Jan  8 12:34:56 2026
+# WiFi: MyNetwork
+# pH Calibration: Yes
+# EC Calibration: Yes
+# Data Points: 288
+# Interval: 5 seconds
+#
+Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,Valid
+2026-01-08 12:30:00,1736339400,24.50,250.00,7.20,1.410,true
+2026-01-08 12:30:05,1736339405,24.51,249.50,7.21,1.411,true
+...
+```
+
+#### JSON Format
+Best for programmatic processing, scripting, or API integration.
+
+```json
+{
+  "device": {
+    "name": "Kate's Aquarium #7",
+    "export_timestamp": 1736339400,
+    "uptime_seconds": 86400,
+    "wifi_ssid": "MyNetwork",
+    "wifi_ip": "192.168.1.100",
+    "ph_calibrated": true,
+    "ec_calibrated": true,
+    "data_points": 288,
+    "interval_seconds": 5
+  },
+  "data": [
+    {
+      "timestamp": 1736339400,
+      "temp_c": 24.50,
+      "orp_mv": 250.00,
+      "ph": 7.20,
+      "ec_ms_cm": 1.410,
+      "valid": true
+    }
+  ],
+  "summary": {"total_points": 288}
+}
+```
+
+### Usage Examples
+
+**Check system status:**
+```
+> status
+=== System Status ===
+WiFi: Connected to MyNetwork (-45 dBm)
+IP: 192.168.1.100
+pH Calibration: Calibrated
+EC Calibration: Calibrated
+Uptime: 86400 seconds
+```
+
+**Export data for analysis:**
+```
+> dump csv
+[CSV data output - redirect to file or copy/paste]
+```
+
+**Capture data to file (using terminal):**
+Most serial terminals allow saving output to a file. Alternatively, use command-line tools:
+```bash
+# Linux/Mac with screen
+screen -L /dev/ttyUSB0 115200
+# Type: dump csv
+# Output is saved to screenlog.0
+
+# Or with PlatformIO
+pio device monitor > data_export.csv
+# Type: dump csv
+```
+
+### Data History
+
+The controller maintains a circular buffer of 288 data points at 5-second intervals (24 minutes of history). For longer-term logging, use:
+- **Web UI Export** - Click "Export CSV" or "Export JSON" buttons on the Charts page
+- The `/api/history` REST endpoint or `/api/export/csv` and `/api/export/json` endpoints
+- MQTT integration with a time-series database
+- Regular console dumps saved to files
+
+### Web UI Export
+
+You can also export data directly from the web interface:
+
+1. Navigate to the **Charts** page at `http://aquarium.local/charts`
+2. Click **Export CSV** or **Export JSON** buttons at the top of the page
+3. The file will automatically download with a timestamp in the filename (e.g., `aquarium-data-2026-01-08T12-34-56.csv`)
+
+This is the easiest method if you're already using the web interface!
 
 ---
 

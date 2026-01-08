@@ -76,7 +76,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             gap: 15px;
             align-items: center;
         }
-        .nav a, .theme-toggle {
+        .nav a, .theme-toggle, .nav button {
             padding: 10px 20px;
             background: var(--bg-primary);
             color: var(--text-primary);
@@ -88,7 +88,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             font-weight: 500;
             cursor: pointer;
         }
-        .nav a:hover, .theme-toggle:hover {
+        .nav a:hover, .theme-toggle:hover, .nav button:hover {
             background: var(--color-primary);
             color: var(--bg-primary);
             box-shadow: 0 0 20px var(--glow);
@@ -219,6 +219,8 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             <a href='/'>Dashboard</a>
             <a href='/calibration'>Calibration</a>
             <a href='/charts'>Charts</a>
+            <button onclick='exportCSV()' title='Export data as CSV'>CSV</button>
+            <button onclick='exportJSON()' title='Export data as JSON'>JSON</button>
             <button class='theme-toggle' onclick='toggleTheme()' id='themeToggle'>☀️</button>
         </div>
     </div>
@@ -524,6 +526,50 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
             } catch (error) {
                 console.error('Error fetching current data:', error);
+            }
+        }
+
+        async function exportCSV() {
+            try {
+                const response = await fetch('/api/export/csv');
+                const blob = await response.blob();
+
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const filename = `aquarium-data-${timestamp}.csv`;
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                console.error('CSV export failed:', error);
+                alert('Failed to export CSV. Please try again.');
+            }
+        }
+
+        async function exportJSON() {
+            try {
+                const response = await fetch('/api/export/json');
+                const blob = await response.blob();
+
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const filename = `aquarium-data-${timestamp}.json`;
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                console.error('JSON export failed:', error);
+                alert('Failed to export JSON. Please try again.');
             }
         }
 

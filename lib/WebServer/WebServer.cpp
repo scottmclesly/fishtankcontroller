@@ -128,6 +128,15 @@ void AquariumWebServer::setupRoutes() {
         this->handleGetHistory(request);
     });
 
+    // Data export endpoints
+    server.on("/api/export/csv", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleExportCSV(request);
+    });
+
+    server.on("/api/export/json", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleExportJSON(request);
+    });
+
     // Calibration API endpoints
     server.on("/api/calibration/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
         this->handleGetCalibrationStatus(request);
@@ -1306,4 +1315,141 @@ String AquariumWebServer::generateCalibrationPage() {
 
 String AquariumWebServer::generateChartsPage() {
     return String(CHARTS_PAGE_HTML);
+}
+
+void AquariumWebServer::handleExportCSV(AsyncWebServerRequest *request) {
+    String csv = "";
+
+    // Header with metadata
+    csv += "# Aquarium Monitor Data Export\r\n";
+    csv += "# Device: Kate's Aquarium #7 | Export time: ";
+
+    time_t now = time(nullptr);
+    if (now > 100000) {
+        csv += ctime(&now);
+    } else {
+        csv += String(millis() / 1000);
+        csv += " seconds since boot (NTP not synced)\r\n";
+    }
+
+    csv += "# WiFi: ";
+    csv += wifiManager->getSSID();
+    csv += "\r\n";
+    csv += "# pH Calibration: ";
+    csv += calibrationManager->hasValidPHCalibration() ? "Yes" : "No";
+    csv += "\r\n";
+    csv += "# EC Calibration: ";
+    csv += calibrationManager->hasValidECCalibration() ? "Yes" : "No";
+    csv += "\r\n";
+    csv += "# Data Points: ";
+    csv += String(historyCount);
+    csv += "\r\n";
+    csv += "# Interval: 5 seconds\r\n";
+    csv += "#\r\n";
+
+    // CSV Header
+    csv += "Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,Valid\r\n";
+
+    // Output data in chronological order
+    int startIdx = historyCount < HISTORY_SIZE ? 0 : historyHead;
+
+    for (int i = 0; i < historyCount; i++) {
+        int idx = (startIdx + i) % HISTORY_SIZE;
+
+        if (history[idx].valid) {
+            // Format timestamp
+            time_t ts = history[idx].timestamp;
+            if (ts > 100000) {
+                struct tm* timeinfo = localtime(&ts);
+                char timeStr[32];
+                strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", timeinfo);
+                csv += timeStr;
+            } else {
+                csv += "N/A";
+            }
+            csv += ",";
+
+            // Unix timestamp
+            csv += String((long long)history[idx].timestamp);
+            csv += ",";
+
+            // Temperature
+            csv += String(history[idx].temp_c, 2);
+            csv += ",";
+
+            // ORP
+            csv += String(history[idx].orp_mv, 2);
+            csv += ",";
+
+            // pH
+            csv += String(history[idx].ph, 2);
+            csv += ",";
+
+            // EC
+            csv += String(history[idx].ec_ms_cm, 3);
+            csv += ",";
+
+            // Valid flag
+            csv += "true\r\n";
+        }
+    }
+
+    // Set appropriate headers for file download
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/csv", csv);
+    response->addHeader("Content-Disposition", "attachment; filename=aquarium-data.csv");
+    response->addHeader("Cache-Control", "no-cache");
+    request->send(response);
+}
+
+void AquariumWebServer::handleExportJSON(AsyncWebServerRequest *request) {
+    JsonDocument doc;
+
+    time_t now = time(nullptr);
+
+    // Device metadata
+    doc["device"]["name"] = "Kate's Aquarium #7";
+    if (now > 100000) {
+        doc["device"]["export_timestamp"] = (long long)now;
+    } else {
+        doc["device"]["export_timestamp"] = nullptr;
+    }
+    doc["device"]["uptime_seconds"] = millis() / 1000;
+    doc["device"]["wifi_ssid"] = wifiManager->getSSID();
+    doc["device"]["wifi_ip"] = wifiManager->getIPAddress();
+    doc["device"]["ph_calibrated"] = calibrationManager->hasValidPHCalibration();
+    doc["device"]["ec_calibrated"] = calibrationManager->hasValidECCalibration();
+    doc["device"]["data_points"] = historyCount;
+    doc["device"]["interval_seconds"] = 5;
+
+    // Data array
+    JsonArray dataArray = doc["data"].to<JsonArray>();
+
+    int startIdx = historyCount < HISTORY_SIZE ? 0 : historyHead;
+    int validCount = 0;
+
+    for (int i = 0; i < historyCount; i++) {
+        int idx = (startIdx + i) % HISTORY_SIZE;
+
+        if (history[idx].valid) {
+            validCount++;
+            JsonObject point = dataArray.add<JsonObject>();
+            point["timestamp"] = (long long)history[idx].timestamp;
+            point["temp_c"] = serialized(String(history[idx].temp_c, 2));
+            point["orp_mv"] = serialized(String(history[idx].orp_mv, 2));
+            point["ph"] = serialized(String(history[idx].ph, 2));
+            point["ec_ms_cm"] = serialized(String(history[idx].ec_ms_cm, 3));
+            point["valid"] = true;
+        }
+    }
+
+    // Summary
+    doc["summary"]["total_points"] = validCount;
+
+    String response;
+    serializeJson(doc, response);
+
+    AsyncWebServerResponse *asyncResponse = request->beginResponse(200, "application/json", response);
+    asyncResponse->addHeader("Content-Disposition", "attachment; filename=aquarium-data.json");
+    asyncResponse->addHeader("Cache-Control", "no-cache");
+    request->send(asyncResponse);
 }
