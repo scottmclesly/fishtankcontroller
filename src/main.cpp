@@ -3,6 +3,7 @@
 #include <ESPmDNS.h>
 #include "WiFiManager.h"
 #include "WebServer.h"
+#include "CalibrationManager.h"
 
 // POET Sensor I2C Configuration
 #define POET_I2C_ADDR 0x1F
@@ -35,6 +36,7 @@ struct POETResult {
 
 // Global objects
 WiFiManager wifiManager;
+CalibrationManager calibrationManager;
 AquariumWebServer* webServer = nullptr;
 
 // Function prototypes
@@ -57,6 +59,12 @@ void setup() {
   Serial.println("I2C Address: 0x1F");
   Serial.println();
 
+  // Initialize Calibration Manager
+  if (!calibrationManager.begin()) {
+    Serial.println("WARNING: Failed to initialize calibration manager");
+  }
+  Serial.println();
+
   // Initialize WiFi Manager
   bool wifiConnected = wifiManager.begin();
 
@@ -68,7 +76,7 @@ void setup() {
   }
 
   // Initialize Web Server
-  webServer = new AquariumWebServer(&wifiManager);
+  webServer = new AquariumWebServer(&wifiManager, &calibrationManager);
   webServer->begin();
 
   if (wifiConnected) {
@@ -132,17 +140,26 @@ void loop() {
     Serial.print(orp_mV, 2);
     Serial.println(" mV");
 
-    // pH (uncalibrated - assumes 0mV offset at pH 7.0)
-    float pH = calculatePH(result.ugs_uV);
+    // pH (uses calibration if available)
+    float ugs_mV = result.ugs_uV / 1000.0;
+    float pH = calibrationManager.calculatePH(ugs_mV);
     Serial.print("pH:          ");
     Serial.print(pH, 2);
-    Serial.println(" (uncalibrated - needs buffer calibration!)");
+    if (!calibrationManager.hasValidPHCalibration()) {
+      Serial.println(" (uncalibrated - needs buffer calibration!)");
+    } else {
+      Serial.println(" (calibrated)");
+    }
 
-    // EC (uncalibrated - assumes cell constant = 1.0 /cm)
-    float ec_mS_cm = calculateEC(result.ec_nA, result.ec_uV, 1.0);
+    // EC (uses calibration if available)
+    float ec_mS_cm = calibrationManager.calculateEC(result.ec_nA, result.ec_uV, temp_C);
     Serial.print("EC:          ");
     Serial.print(ec_mS_cm, 3);
-    Serial.println(" mS/cm (uncalibrated - needs known solution!)");
+    if (!calibrationManager.hasValidECCalibration()) {
+      Serial.println(" mS/cm (uncalibrated - needs known solution!)");
+    } else {
+      Serial.println(" mS/cm (calibrated)");
+    }
 
     // Calculate resistance for EC measurement
     if (result.ec_nA != 0) {
