@@ -77,7 +77,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             gap: 15px;
             align-items: center;
         }
-        .nav a, .theme-toggle, .nav button {
+        .nav a, .nav button, .theme-toggle {
             padding: 10px 20px;
             background: var(--bg-primary);
             color: var(--text-primary);
@@ -89,7 +89,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             font-weight: 500;
             cursor: pointer;
         }
-        .nav a:hover, .theme-toggle:hover, .nav button:hover {
+        .nav a:hover, .nav button:hover, .theme-toggle:hover {
             background: var(--color-primary);
             color: var(--bg-primary);
             box-shadow: 0 0 20px var(--glow);
@@ -218,11 +218,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         <h1>📊 Kate's Aquarium #7 Analytics</h1>
         <div class='nav'>
             <a href='/'>Dashboard</a>
-            <a href='/calibration'>Calibration</a>
-            <a href='/charts'>Charts</a>
-            <button onclick='exportCSV()' title='Export data as CSV'>CSV</button>
-            <button onclick='exportJSON()' title='Export data as JSON'>JSON</button>
-            <button class='theme-toggle' onclick='toggleTheme()' id='themeToggle'>☀️</button>
+            <button class='theme-toggle' onclick='window.location.href="/calibration"' title='Calibration'>⚙️</button>
         </div>
     </div>
 
@@ -341,8 +337,8 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         }
 
         function updateThemeIcon(theme) {
-            const btn = document.getElementById('themeToggle');
-            btn.textContent = theme === 'light' ? '🌙' : '☀️';
+            // Theme toggle button removed from this page
+            // Theme is now managed in calibration settings
         }
 
         function updateChartTheme(theme) {

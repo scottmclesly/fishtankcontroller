@@ -353,8 +353,8 @@ String AquariumWebServer::generateHomePage() {
     html += ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 20px; background: var(--bg-card); border-radius: 15px; border: 1px solid var(--border-color); box-shadow: 0 4px 20px var(--shadow); }";
     html += "h1 { font-size: 2em; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 700; letter-spacing: -0.5px; margin: 0; }";
     html += ".nav { display: flex; gap: 15px; align-items: center; }";
-    html += ".nav a, .theme-toggle { padding: 10px 20px; background: var(--bg-primary); color: var(--text-primary); text-decoration: none; border-radius: 8px; border: 1px solid var(--border-color); transition: all 0.3s ease; font-size: 0.9em; font-weight: 500; cursor: pointer; }";
-    html += ".nav a:hover, .theme-toggle:hover { background: var(--color-primary); color: var(--bg-primary); box-shadow: 0 0 20px var(--glow); transform: translateY(-2px); }";
+    html += ".nav a, .nav button, .theme-toggle { padding: 10px 20px; background: var(--bg-primary); color: var(--text-primary); text-decoration: none; border-radius: 8px; border: 1px solid var(--border-color); transition: all 0.3s ease; font-size: 0.9em; font-weight: 500; cursor: pointer; }";
+    html += ".nav a:hover, .nav button:hover, .theme-toggle:hover { background: var(--color-primary); color: var(--bg-primary); box-shadow: 0 0 20px var(--glow); transform: translateY(-2px); }";
     html += ".status-bar { display: flex; justify-content: center; gap: 20px; padding: 15px; background: var(--bg-card); border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-color); flex-wrap: wrap; }";
     html += ".status-item { display: flex; align-items: center; gap: 8px; font-size: 0.85em; color: var(--text-secondary); }";
     html += ".status-dot { width: 10px; height: 10px; border-radius: 50%; background: #10b981; animation: pulse 2s ease-in-out infinite; }";
@@ -386,8 +386,8 @@ String AquariumWebServer::generateHomePage() {
     html += "  updateThemeIcon(newTheme);";
     html += "}";
     html += "function updateThemeIcon(theme) {";
-    html += "  const btn = document.getElementById('themeToggle');";
-    html += "  btn.textContent = theme === 'light' ? '🌙' : '☀️';";
+    html += "  // Theme toggle button removed from this page";
+    html += "  // Theme is now managed in calibration settings";
     html += "}";
     html += "function updateData() {";
     html += "  fetch('/api/sensors')";
@@ -428,10 +428,8 @@ String AquariumWebServer::generateHomePage() {
     html += "<div class='header'>";
     html += "<h1>🐠 " + getUnitName() + " Monitor</h1>";
     html += "<div class='nav'>";
-    html += "<a href='/'>Dashboard</a>";
-    html += "<a href='/calibration'>Calibration</a>";
     html += "<a href='/charts'>Charts</a>";
-    html += "<button class='theme-toggle' onclick='toggleTheme()' id='themeToggle'>☀️</button>";
+    html += "<button class='theme-toggle' onclick='window.location.href=\"/calibration\"' title='Calibration'>⚙️</button>";
     html += "</div></div>";
 
     html += "<div class='status-bar'>";
@@ -1075,7 +1073,7 @@ String AquariumWebServer::generateCalibrationPage() {
             gap: 15px;
             align-items: center;
         }
-        .nav a, .theme-toggle {
+        .nav a, .nav button, .theme-toggle {
             padding: 10px 20px;
             background: var(--bg-primary);
             color: var(--text-primary);
@@ -1087,7 +1085,7 @@ String AquariumWebServer::generateCalibrationPage() {
             font-weight: 500;
             cursor: pointer;
         }
-        .nav a:hover, .theme-toggle:hover {
+        .nav a:hover, .nav button:hover, .theme-toggle:hover {
             background: var(--color-primary);
             color: var(--bg-primary);
             box-shadow: 0 0 20px var(--glow);
@@ -1198,9 +1196,9 @@ String AquariumWebServer::generateCalibrationPage() {
         <h1>🔬 Sensor Calibration</h1>
         <div class='nav'>
             <a href='/'>Dashboard</a>
-            <a href='/calibration'>Calibration</a>
             <a href='/charts'>Charts</a>
-            <button class='theme-toggle' onclick='toggleTheme()' id='themeToggle'>🌙</button>
+            <button onclick='exportCSV()' title='Export data as CSV'>CSV</button>
+            <button onclick='exportJSON()' title='Export data as JSON'>JSON</button>
         </div>
     </div>
 
@@ -1221,6 +1219,24 @@ String AquariumWebServer::generateCalibrationPage() {
         </div>
 
         <button onclick='saveUnitName()'>Save Unit Name</button>
+    </div>
+
+    <!-- Theme Configuration Card -->
+    <div class='card'>
+        <h2>Theme Settings</h2>
+        <div class='info'>
+            <strong>Choose your preferred theme:</strong><br>
+            Select between light and dark mode for all pages.
+        </div>
+
+        <div class='form-group'>
+            <label>Theme:</label>
+            <div style='display: flex; gap: 10px; margin-top: 10px;'>
+                <button onclick='setTheme("light")' style='flex: 1;'>☀️ Light Mode</button>
+                <button onclick='setTheme("dark")' style='flex: 1;'>🌙 Dark Mode</button>
+            </div>
+            <div id='currentTheme' style='margin-top: 10px; font-size: 0.9em; color: var(--text-secondary);'></div>
+        </div>
     </div>
 
     <!-- Current Readings Card -->
@@ -1421,8 +1437,22 @@ String AquariumWebServer::generateCalibrationPage() {
         }
 
         function updateThemeIcon(theme) {
-            const btn = document.getElementById('themeToggle');
-            btn.textContent = theme === 'light' ? '🌙' : '☀️';
+            updateThemeDisplay();
+        }
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            updateThemeDisplay();
+            showMessage('Theme changed to ' + theme + ' mode', 'success');
+        }
+
+        function updateThemeDisplay() {
+            const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+            const display = document.getElementById('currentTheme');
+            if (display) {
+                display.textContent = 'Current theme: ' + (theme === 'light' ? '☀️ Light Mode' : '🌙 Dark Mode');
+            }
         }
 
         function showMessage(message, type) {
@@ -1687,6 +1717,48 @@ String AquariumWebServer::generateCalibrationPage() {
                         showMessage(data.message, 'error');
                     }
                 });
+        }
+
+        async function exportCSV() {
+            try {
+                const response = await fetch('/api/export/csv');
+                const blob = await response.blob();
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const filename = `aquarium-data-${timestamp}.csv`;
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showMessage('CSV export successful', 'success');
+            } catch (error) {
+                console.error('CSV export failed:', error);
+                showMessage('Failed to export CSV. Please try again.', 'error');
+            }
+        }
+
+        async function exportJSON() {
+            try {
+                const response = await fetch('/api/export/json');
+                const blob = await response.blob();
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const filename = `aquarium-data-${timestamp}.json`;
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showMessage('JSON export successful', 'success');
+            } catch (error) {
+                console.error('JSON export failed:', error);
+                showMessage('Failed to export JSON. Please try again.', 'error');
+            }
         }
 
         // Initialize on page load
