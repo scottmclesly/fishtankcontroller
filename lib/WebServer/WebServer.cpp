@@ -275,59 +275,77 @@ String AquariumWebServer::generateHomePage() {
     html += "<title>Aquarium Monitor</title>";
     html += "<style>";
     html += ":root {";
-    html += "  --bg-primary: #f0f8ff;";
-    html += "  --bg-card: #ffffff;";
-    html += "  --bg-status: #e8f5e9;";
-    html += "  --text-primary: #333333;";
-    html += "  --text-secondary: #666666;";
-    html += "  --text-tertiary: #999999;";
-    html += "  --color-primary: #006494;";
-    html += "  --color-primary-hover: #004d73;";
-    html += "  --border-color: #e0e0e0;";
-    html += "  --shadow: rgba(0,0,0,0.1);";
-    html += "  --warning-bg: #fff3cd;";
-    html += "  --warning-text: #856404;";
-    html += "  --info-bg: #d1ecf1;";
-    html += "  --info-text: #0c5460;";
-    html += "}";
-    html += "[data-theme='dark'] {";
-    html += "  --bg-primary: #0a1929;";
-    html += "  --bg-card: #132f4c;";
-    html += "  --bg-status: #1e4976;";
-    html += "  --text-primary: #e3f2fd;";
-    html += "  --text-secondary: #b0bec5;";
-    html += "  --text-tertiary: #78909c;";
-    html += "  --color-primary: #29b6f6;";
-    html += "  --color-primary-hover: #0288d1;";
-    html += "  --border-color: #1e4976;";
-    html += "  --shadow: rgba(0,0,0,0.3);";
+    html += "  --bg-primary: #0a0e1a;";
+    html += "  --bg-card: #1a1f2e;";
+    html += "  --bg-status: #1e293b;";
+    html += "  --text-primary: #e0e7ff;";
+    html += "  --text-secondary: #94a3b8;";
+    html += "  --text-tertiary: #64748b;";
+    html += "  --color-primary: #00d4ff;";
+    html += "  --color-secondary: #7c3aed;";
+    html += "  --color-primary-hover: #00b8e6;";
+    html += "  --border-color: #1e293b;";
+    html += "  --shadow: rgba(0, 212, 255, 0.1);";
+    html += "  --glow: rgba(0, 212, 255, 0.3);";
+    html += "  --temp-color: #ef4444;";
+    html += "  --orp-color: #f59e0b;";
+    html += "  --ph-color: #10b981;";
+    html += "  --ec-color: #3b82f6;";
     html += "  --warning-bg: #7f6003;";
     html += "  --warning-text: #fff3cd;";
-    html += "  --info-bg: #0c5460;";
-    html += "  --info-text: #d1ecf1;";
+    html += "  --success-bg: #2e7d32;";
+    html += "  --success-text: #c8e6c9;";
     html += "}";
-    html += "body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: var(--bg-primary); color: var(--text-primary); transition: background 0.3s, color 0.3s; }";
-    html += "h1 { color: var(--color-primary); text-align: center; }";
-    html += ".theme-toggle { position: fixed; top: 20px; right: 20px; background: var(--bg-card); border: 2px solid var(--border-color); border-radius: 25px; padding: 8px 16px; cursor: pointer; font-size: 1.2em; box-shadow: 0 2px 5px var(--shadow); z-index: 1000; transition: all 0.3s; }";
-    html += ".theme-toggle:hover { transform: scale(1.05); }";
-    html += ".sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }";
-    html += ".sensor-card { background: var(--bg-card); border-radius: 10px; padding: 20px; box-shadow: 0 2px 5px var(--shadow); border: 1px solid var(--border-color); transition: all 0.3s; }";
-    html += ".sensor-value { font-size: 2em; font-weight: bold; color: var(--color-primary); margin: 10px 0; }";
-    html += ".sensor-label { color: var(--text-secondary); font-size: 0.9em; }";
-    html += ".sensor-unit { color: var(--text-tertiary); font-size: 0.8em; }";
-    html += ".status { text-align: center; padding: 10px; background: var(--bg-status); border-radius: 5px; margin: 20px 0; }";
-    html += ".warning { background: var(--warning-bg); color: var(--warning-text); padding: 10px; border-radius: 5px; margin: 10px 0; }";
-    html += ".info { background: var(--info-bg); color: var(--info-text); padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 0.9em; }";
-    html += "a { color: var(--color-primary); }";
+    html += "[data-theme='light'] {";
+    html += "  --bg-primary: #f8fafc;";
+    html += "  --bg-card: #ffffff;";
+    html += "  --bg-status: #f1f5f9;";
+    html += "  --text-primary: #0f172a;";
+    html += "  --text-secondary: #475569;";
+    html += "  --text-tertiary: #94a3b8;";
+    html += "  --color-primary: #0ea5e9;";
+    html += "  --color-secondary: #8b5cf6;";
+    html += "  --color-primary-hover: #0284c7;";
+    html += "  --border-color: #e2e8f0;";
+    html += "  --shadow: rgba(14, 165, 233, 0.1);";
+    html += "  --glow: rgba(14, 165, 233, 0.2);";
+    html += "  --warning-bg: #fff3cd;";
+    html += "  --warning-text: #856404;";
+    html += "  --success-bg: #d4edda;";
+    html += "  --success-text: #155724;";
+    html += "}";
+    html += "* { box-sizing: border-box; margin: 0; padding: 0; }";
+    html += "body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); padding: 20px; min-height: 100vh; transition: all 0.3s ease; }";
+    html += ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 20px; background: var(--bg-card); border-radius: 15px; border: 1px solid var(--border-color); box-shadow: 0 4px 20px var(--shadow); }";
+    html += "h1 { font-size: 2em; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 700; letter-spacing: -0.5px; margin: 0; }";
+    html += ".nav { display: flex; gap: 15px; align-items: center; }";
+    html += ".nav a, .theme-toggle { padding: 10px 20px; background: var(--bg-primary); color: var(--text-primary); text-decoration: none; border-radius: 8px; border: 1px solid var(--border-color); transition: all 0.3s ease; font-size: 0.9em; font-weight: 500; cursor: pointer; }";
+    html += ".nav a:hover, .theme-toggle:hover { background: var(--color-primary); color: var(--bg-primary); box-shadow: 0 0 20px var(--glow); transform: translateY(-2px); }";
+    html += ".status-bar { display: flex; justify-content: center; gap: 20px; padding: 15px; background: var(--bg-card); border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-color); flex-wrap: wrap; }";
+    html += ".status-item { display: flex; align-items: center; gap: 8px; font-size: 0.85em; color: var(--text-secondary); }";
+    html += ".status-dot { width: 10px; height: 10px; border-radius: 50%; background: #10b981; animation: pulse 2s ease-in-out infinite; }";
+    html += "@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }";
+    html += ".sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }";
+    html += ".sensor-card { background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 2px 10px var(--shadow); position: relative; overflow: hidden; }";
+    html += ".sensor-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: linear-gradient(180deg, var(--card-color), transparent); }";
+    html += ".sensor-label { font-size: 0.85em; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 10px; }";
+    html += ".sensor-value { font-size: 2.5em; font-weight: 700; color: var(--card-color); margin: 10px 0 5px 0; font-variant-numeric: tabular-nums; }";
+    html += ".sensor-unit { font-size: 0.9em; color: var(--text-tertiary); font-weight: 500; }";
+    html += ".sensor-status { font-size: 0.75em; margin-top: 8px; padding: 4px 8px; border-radius: 4px; display: inline-block; }";
+    html += ".calibrated { background: var(--success-bg); color: var(--success-text); }";
+    html += ".uncalibrated { background: var(--warning-bg); color: var(--warning-text); }";
+    html += ".warning-banner { background: var(--warning-bg); color: var(--warning-text); padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid var(--border-color); }";
+    html += ".warning-banner a { color: var(--warning-text); text-decoration: underline; font-weight: bold; }";
+    html += ".info-footer { text-align: center; padding: 15px; background: var(--bg-card); border-radius: 10px; margin-top: 20px; border: 1px solid var(--border-color); font-size: 0.85em; color: var(--text-secondary); }";
     html += "</style>";
     html += "<script>";
     html += "function initTheme() {";
-    html += "  const savedTheme = localStorage.getItem('theme') || 'light';";
+    html += "  const savedTheme = localStorage.getItem('theme') || 'dark';";
     html += "  document.documentElement.setAttribute('data-theme', savedTheme);";
     html += "  updateThemeIcon(savedTheme);";
     html += "}";
     html += "function toggleTheme() {";
-    html += "  const current = document.documentElement.getAttribute('data-theme') || 'light';";
+    html += "  const current = document.documentElement.getAttribute('data-theme') || 'dark';";
     html += "  const newTheme = current === 'light' ? 'dark' : 'light';";
     html += "  document.documentElement.setAttribute('data-theme', newTheme);";
     html += "  localStorage.setItem('theme', newTheme);";
@@ -336,7 +354,6 @@ String AquariumWebServer::generateHomePage() {
     html += "function updateThemeIcon(theme) {";
     html += "  const btn = document.getElementById('themeToggle');";
     html += "  btn.textContent = theme === 'light' ? '🌙' : '☀️';";
-    html += "  btn.title = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';";
     html += "}";
     html += "function updateData() {";
     html += "  fetch('/api/sensors')";
@@ -356,71 +373,80 @@ String AquariumWebServer::generateHomePage() {
     html += "updateData();";
     html += "</script>";
     html += "</head><body>";
-    html += "<button id='themeToggle' class='theme-toggle' onclick='toggleTheme()'>🌙</button>";
-    html += "<h1>🐠 Aquarium Monitor</h1>";
 
-    html += "<div class='status' style='text-align:center;'>";
-    html += "✓ Connected to WiFi: <strong>" + wifiManager->getSSID() + "</strong> | ";
-    html += "IP: <strong>" + wifiManager->getIPAddress() + "</strong><br>";
-    html += "<a href='/calibration' style='text-decoration:none; font-weight:bold; margin:10px 10px 0 0; display:inline-block;'>🔬 Calibration</a>";
-    html += "<a href='/charts' style='text-decoration:none; font-weight:bold; margin-top:10px; display:inline-block;'>📊 Charts</a>";
+    html += "<div class='header'>";
+    html += "<h1>🐠 Aquarium Monitor</h1>";
+    html += "<div class='nav'>";
+    html += "<a href='/'>Dashboard</a>";
+    html += "<a href='/calibration'>Calibration</a>";
+    html += "<a href='/charts'>Charts</a>";
+    html += "<button class='theme-toggle' onclick='toggleTheme()' id='themeToggle'>☀️</button>";
+    html += "</div></div>";
+
+    html += "<div class='status-bar'>";
+    html += "<div class='status-item'><div class='status-dot'></div><span>Connected to: <strong>" + wifiManager->getSSID() + "</strong></span></div>";
+    html += "<div class='status-item'><span>📡 IP: <strong>" + wifiManager->getIPAddress() + "</strong></span></div>";
+    html += "<div class='status-item'><span>⏱️ Update: <span id='lastUpdate'>--</span></span></div>";
     html += "</div>";
 
     String calWarning = "";
     if (!calibrationManager->hasValidPHCalibration() || !calibrationManager->hasValidECCalibration()) {
-        calWarning = "<div class='warning'>⚠️ Sensors require calibration for accurate readings. ";
-        calWarning += "<a href='/calibration' style='color:#856404; text-decoration:underline;'>Click here to calibrate</a></div>";
+        calWarning = "<div class='warning-banner'>⚠️ Sensors require calibration for accurate readings. ";
+        calWarning += "<a href='/calibration'>Click here to calibrate</a></div>";
     }
     html += calWarning;
 
     html += "<div class='sensor-grid'>";
 
     // Temperature
-    html += "<div class='sensor-card'>";
+    html += "<div class='sensor-card' style='--card-color: var(--temp-color)'>";
     html += "<div class='sensor-label'>Temperature</div>";
     html += "<div class='sensor-value'><span id='temp'>";
     html += dataValid ? String(temp_c, 2) : "--";
-    html += "</span> <span class='sensor-unit'>°C</span></div>";
+    html += "</span></div>";
+    html += "<div class='sensor-unit'>°Celsius</div>";
     html += "</div>";
 
     // ORP
-    html += "<div class='sensor-card'>";
+    html += "<div class='sensor-card' style='--card-color: var(--orp-color)'>";
     html += "<div class='sensor-label'>ORP</div>";
     html += "<div class='sensor-value'><span id='orp'>";
     html += dataValid ? String(orp_mv, 2) : "--";
-    html += "</span> <span class='sensor-unit'>mV</span></div>";
+    html += "</span></div>";
+    html += "<div class='sensor-unit'>Millivolts</div>";
     html += "</div>";
 
     // pH
-    html += "<div class='sensor-card'>";
-    html += "<div class='sensor-label'>pH</div>";
+    html += "<div class='sensor-card' style='--card-color: var(--ph-color)'>";
+    html += "<div class='sensor-label'>pH Level</div>";
     html += "<div class='sensor-value'><span id='ph'>";
     html += dataValid ? String(ph, 2) : "--";
     html += "</span></div>";
+    html += "<div class='sensor-unit'>pH Units</div>";
     if (!calibrationManager->hasValidPHCalibration()) {
-        html += "<div class='warning' style='font-size: 0.7em; margin-top: 5px;'>⚠ Uncalibrated</div>";
+        html += "<div class='sensor-status uncalibrated'>⚠ Uncalibrated</div>";
     } else {
-        html += "<div style='background: #d4edda; color: #155724; font-size: 0.7em; margin-top: 5px; padding: 3px; border-radius: 3px;'>✓ Calibrated</div>";
+        html += "<div class='sensor-status calibrated'>✓ Calibrated</div>";
     }
     html += "</div>";
 
     // EC
-    html += "<div class='sensor-card'>";
+    html += "<div class='sensor-card' style='--card-color: var(--ec-color)'>";
     html += "<div class='sensor-label'>Conductivity</div>";
     html += "<div class='sensor-value'><span id='ec'>";
     html += dataValid ? String(ec_ms_cm, 3) : "--";
-    html += "</span> <span class='sensor-unit'>mS/cm</span></div>";
+    html += "</span></div>";
+    html += "<div class='sensor-unit'>mS/cm</div>";
     if (!calibrationManager->hasValidECCalibration()) {
-        html += "<div class='warning' style='font-size: 0.7em; margin-top: 5px;'>⚠ Uncalibrated</div>";
+        html += "<div class='sensor-status uncalibrated'>⚠ Uncalibrated</div>";
     } else {
-        html += "<div style='background: #d4edda; color: #155724; font-size: 0.7em; margin-top: 5px; padding: 3px; border-radius: 3px;'>✓ Calibrated</div>";
+        html += "<div class='sensor-status calibrated'>✓ Calibrated</div>";
     }
     html += "</div>";
 
     html += "</div>";
 
-    html += "<div class='info'>Last update: <span id='lastUpdate'>--</span></div>";
-    html += "<div class='info'>Auto-refresh every 2 seconds</div>";
+    html += "<div class='info-footer'>Auto-refresh every 2 seconds | Real-time monitoring active</div>";
 
     html += "</body></html>";
 
@@ -742,18 +768,18 @@ String AquariumWebServer::generateCalibrationPage() {
     <title>Sensor Calibration</title>
     <style>
         :root {
-            --bg-primary: #f0f8ff;
+            --bg-primary: #f8fafc;
             --bg-card: #ffffff;
-            --text-primary: #333333;
-            --text-secondary: #666666;
-            --color-primary: #006494;
-            --color-primary-hover: #004d73;
-            --color-secondary: #6c757d;
-            --color-secondary-hover: #5a6268;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --color-primary: #0ea5e9;
+            --color-primary-hover: #0284c7;
+            --color-secondary: #8b5cf6;
             --color-danger: #dc3545;
             --color-danger-hover: #c82333;
-            --border-color: #dddddd;
-            --shadow: rgba(0,0,0,0.1);
+            --border-color: #e2e8f0;
+            --shadow: rgba(14, 165, 233, 0.1);
+            --glow: rgba(14, 165, 233, 0.2);
             --status-calibrated-bg: #d4edda;
             --status-calibrated-text: #155724;
             --status-uncalibrated-bg: #fff3cd;
@@ -766,27 +792,27 @@ String AquariumWebServer::generateCalibrationPage() {
             --success-text: #155724;
             --error-bg: #f8d7da;
             --error-text: #721c24;
-            --readings-bg: #e9ecef;
-            --steps-bg: #f8f9fa;
-            --steps-border: #006494;
+            --readings-bg: #f1f5f9;
+            --steps-bg: #f8fafc;
+            --steps-border: #0ea5e9;
         }
         [data-theme='dark'] {
-            --bg-primary: #0a1929;
-            --bg-card: #132f4c;
-            --text-primary: #e3f2fd;
-            --text-secondary: #b0bec5;
-            --color-primary: #29b6f6;
-            --color-primary-hover: #0288d1;
-            --color-secondary: #90a4ae;
-            --color-secondary-hover: #78909c;
+            --bg-primary: #0a0e1a;
+            --bg-card: #1a1f2e;
+            --text-primary: #e0e7ff;
+            --text-secondary: #94a3b8;
+            --color-primary: #00d4ff;
+            --color-primary-hover: #00b8e6;
+            --color-secondary: #7c3aed;
             --color-danger: #ef5350;
             --color-danger-hover: #e53935;
-            --border-color: #1e4976;
-            --shadow: rgba(0,0,0,0.3);
+            --border-color: #1e293b;
+            --shadow: rgba(0, 212, 255, 0.1);
+            --glow: rgba(0, 212, 255, 0.3);
             --status-calibrated-bg: #2e7d32;
             --status-calibrated-text: #c8e6c9;
-            --status-uncalibrated-bg: #f57f17;
-            --status-uncalibrated-text: #fff9c4;
+            --status-uncalibrated-bg: #7f6003;
+            --status-uncalibrated-text: #fff3cd;
             --info-bg: #0c5460;
             --info-text: #d1ecf1;
             --warning-bg: #7f6003;
@@ -795,9 +821,9 @@ String AquariumWebServer::generateCalibrationPage() {
             --success-text: #c8e6c9;
             --error-bg: #c62828;
             --error-text: #ffcdd2;
-            --readings-bg: #1e4976;
-            --steps-bg: #1e4976;
-            --steps-border: #29b6f6;
+            --readings-bg: #1e293b;
+            --steps-bg: #1e293b;
+            --steps-border: #00d4ff;
         }
         * { box-sizing: border-box; }
         body {
@@ -809,37 +835,51 @@ String AquariumWebServer::generateCalibrationPage() {
             color: var(--text-primary);
             transition: background 0.3s, color 0.3s;
         }
-        h1 { color: var(--color-primary); text-align: center; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: var(--bg-card);
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 20px var(--shadow);
+        }
+        h1 {
+            font-size: 2em;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin: 0;
+        }
         h2 { color: var(--color-primary); margin-top: 30px; }
         h3 { color: var(--color-primary); }
-        .theme-toggle {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--bg-card);
-            border: 2px solid var(--border-color);
-            border-radius: 25px;
-            padding: 8px 16px;
-            cursor: pointer;
-            font-size: 1.2em;
-            box-shadow: 0 2px 5px var(--shadow);
-            z-index: 1000;
-            transition: all 0.3s;
-        }
-        .theme-toggle:hover { transform: scale(1.05); }
         .nav {
-            text-align: center;
-            margin: 20px 0;
-            padding: 10px;
-            background: var(--bg-card);
-            border-radius: 10px;
-            border: 1px solid var(--border-color);
+            display: flex;
+            gap: 15px;
+            align-items: center;
         }
-        .nav a {
-            margin: 0 10px;
-            color: var(--color-primary);
+        .nav a, .theme-toggle {
+            padding: 10px 20px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             text-decoration: none;
-            font-weight: bold;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .nav a:hover, .theme-toggle:hover {
+            background: var(--color-primary);
+            color: var(--bg-primary);
+            box-shadow: 0 0 20px var(--glow);
+            transform: translateY(-2px);
         }
         .card {
             background: var(--bg-card);
@@ -942,12 +982,14 @@ String AquariumWebServer::generateCalibrationPage() {
     </style>
 </head>
 <body>
-    <button id='themeToggle' class='theme-toggle' onclick='toggleTheme()'>🌙</button>
-    <h1>🔬 Sensor Calibration</h1>
-
-    <div class='nav'>
-        <a href='/'>← Dashboard</a>
-        <a href='/calibration'>Calibration</a>
+    <div class='header'>
+        <h1>🔬 Sensor Calibration</h1>
+        <div class='nav'>
+            <a href='/'>Dashboard</a>
+            <a href='/calibration'>Calibration</a>
+            <a href='/charts'>Charts</a>
+            <button class='theme-toggle' onclick='toggleTheme()' id='themeToggle'>🌙</button>
+        </div>
     </div>
 
     <div id='messages'></div>
@@ -1068,13 +1110,13 @@ String AquariumWebServer::generateCalibrationPage() {
 
     <script>
         function initTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
+            const savedTheme = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', savedTheme);
             updateThemeIcon(savedTheme);
         }
 
         function toggleTheme() {
-            const current = document.documentElement.getAttribute('data-theme') || 'light';
+            const current = document.documentElement.getAttribute('data-theme') || 'dark';
             const newTheme = current === 'light' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
@@ -1084,7 +1126,6 @@ String AquariumWebServer::generateCalibrationPage() {
         function updateThemeIcon(theme) {
             const btn = document.getElementById('themeToggle');
             btn.textContent = theme === 'light' ? '🌙' : '☀️';
-            btn.title = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
         }
 
         function showMessage(message, type) {
