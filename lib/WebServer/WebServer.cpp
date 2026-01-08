@@ -1,8 +1,10 @@
 #include "WebServer.h"
 #include "WiFiManager.h"
 #include "CalibrationManager.h"
+#include "MQTTManager.h"
 #include "charts_page.h"
 #include <WiFi.h>
+#include <Preferences.h>
 
 // Include POETResult struct definition from main
 struct POETResult {
@@ -14,8 +16,8 @@ struct POETResult {
     bool valid;
 };
 
-AquariumWebServer::AquariumWebServer(WiFiManager* wifiMgr, CalibrationManager* calMgr)
-    : server(80), wifiManager(wifiMgr), calibrationManager(calMgr),
+AquariumWebServer::AquariumWebServer(WiFiManager* wifiMgr, CalibrationManager* calMgr, MQTTManager* mqttMgr)
+    : server(80), wifiManager(wifiMgr), calibrationManager(calMgr), mqttManager(mqttMgr),
       raw_temp_mC(0), raw_orp_uV(0), raw_ugs_uV(0), raw_ec_nA(0), raw_ec_uV(0),
       temp_c(0), orp_mv(0), ph(0), ec_ms_cm(0), lastUpdate(0), dataValid(false),
       historyHead(0), historyCount(0), lastHistoryUpdate(0), ntpInitialized(false) {
@@ -164,6 +166,28 @@ void AquariumWebServer::setupRoutes() {
 
     server.on("/api/calibration/ec/clear", HTTP_POST, [this](AsyncWebServerRequest *request) {
         this->handleClearEcCalibration(request);
+    });
+
+    // MQTT API endpoints
+    server.on("/api/mqtt/config", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetMQTTConfig(request);
+    });
+
+    server.on("/api/mqtt/config", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        this->handleSaveMQTTConfig(request);
+    });
+
+    server.on("/api/mqtt/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetMQTTStatus(request);
+    });
+
+    // Unit name API endpoints
+    server.on("/api/unit/name", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetUnitName(request);
+    });
+
+    server.on("/api/unit/name", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        this->handleSaveUnitName(request);
     });
 
     // 404 handler
@@ -377,14 +401,33 @@ String AquariumWebServer::generateHomePage() {
     html += "      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();";
     html += "    });";
     html += "}";
+    html += "function updateMqttStatus() {";
+    html += "  fetch('/api/mqtt/status')";
+    html += "    .then(response => response.json())";
+    html += "    .then(data => {";
+    html += "      const statusEl = document.getElementById('mqttStatus');";
+    html += "      if (data.connected) {";
+    html += "        statusEl.textContent = '✓ Connected';";
+    html += "        statusEl.style.color = 'var(--success-text)';";
+    html += "      } else if (data.enabled) {";
+    html += "        statusEl.textContent = '⚠ ' + data.status;";
+    html += "        statusEl.style.color = 'var(--warning-text)';";
+    html += "      } else {";
+    html += "        statusEl.textContent = 'Disabled';";
+    html += "        statusEl.style.color = 'var(--text-tertiary)';";
+    html += "      }";
+    html += "    });";
+    html += "}";
     html += "initTheme();";
     html += "setInterval(updateData, 2000);";
+    html += "setInterval(updateMqttStatus, 5000);";
     html += "updateData();";
+    html += "updateMqttStatus();";
     html += "</script>";
     html += "</head><body>";
 
     html += "<div class='header'>";
-    html += "<h1>🐠 Kate's Aquarium #7 Monitor</h1>";
+    html += "<h1>🐠 " + getUnitName() + " Monitor</h1>";
     html += "<div class='nav'>";
     html += "<a href='/'>Dashboard</a>";
     html += "<a href='/calibration'>Calibration</a>";
@@ -395,6 +438,7 @@ String AquariumWebServer::generateHomePage() {
     html += "<div class='status-bar'>";
     html += "<div class='status-item'><div class='status-dot'></div><span>Connected to: <strong>" + wifiManager->getSSID() + "</strong></span></div>";
     html += "<div class='status-item'><span>📡 IP: <strong>" + wifiManager->getIPAddress() + "</strong></span></div>";
+    html += "<div class='status-item' id='mqttStatusItem'><span id='mqttIndicator'>📊 MQTT: <span id='mqttStatus'>Checking...</span></span></div>";
     html += "<div class='status-item'><span>⏱️ Update: <span id='lastUpdate'>--</span></span></div>";
     html += "</div>";
 
@@ -768,6 +812,156 @@ void AquariumWebServer::handleClearEcCalibration(AsyncWebServerRequest *request)
     request->send(200, "application/json", response);
 }
 
+void AquariumWebServer::handleGetMQTTConfig(AsyncWebServerRequest *request) {
+    MQTTConfiguration config = mqttManager->getMQTTConfig();
+
+    JsonDocument doc;
+    doc["enabled"] = config.enabled;
+    doc["broker_host"] = config.broker_host;
+    doc["broker_port"] = config.broker_port;
+    doc["username"] = config.username;
+    doc["password"] = config.password;
+    doc["device_id"] = config.device_id;
+    doc["publish_interval_ms"] = config.publish_interval_ms;
+    doc["discovery_enabled"] = config.discovery_enabled;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void AquariumWebServer::handleSaveMQTTConfig(AsyncWebServerRequest *request) {
+    MQTTConfiguration config;
+
+    // Parse form parameters
+    if (request->hasParam("enabled", true)) {
+        String enabled = request->getParam("enabled", true)->value();
+        config.enabled = (enabled == "true" || enabled == "1");
+    } else {
+        config.enabled = false;
+    }
+
+    if (request->hasParam("broker_host", true)) {
+        String host = request->getParam("broker_host", true)->value();
+        strncpy(config.broker_host, host.c_str(), sizeof(config.broker_host) - 1);
+        config.broker_host[sizeof(config.broker_host) - 1] = '\0';
+    }
+
+    if (request->hasParam("broker_port", true)) {
+        config.broker_port = request->getParam("broker_port", true)->value().toInt();
+    } else {
+        config.broker_port = 1883;
+    }
+
+    if (request->hasParam("username", true)) {
+        String username = request->getParam("username", true)->value();
+        strncpy(config.username, username.c_str(), sizeof(config.username) - 1);
+        config.username[sizeof(config.username) - 1] = '\0';
+    }
+
+    if (request->hasParam("password", true)) {
+        String password = request->getParam("password", true)->value();
+        strncpy(config.password, password.c_str(), sizeof(config.password) - 1);
+        config.password[sizeof(config.password) - 1] = '\0';
+    }
+
+    if (request->hasParam("device_id", true)) {
+        String deviceId = request->getParam("device_id", true)->value();
+        strncpy(config.device_id, deviceId.c_str(), sizeof(config.device_id) - 1);
+        config.device_id[sizeof(config.device_id) - 1] = '\0';
+    } else {
+        strncpy(config.device_id, "aquarium", sizeof(config.device_id) - 1);
+    }
+
+    if (request->hasParam("publish_interval_ms", true)) {
+        config.publish_interval_ms = request->getParam("publish_interval_ms", true)->value().toInt();
+    } else {
+        config.publish_interval_ms = 5000;
+    }
+
+    if (request->hasParam("discovery_enabled", true)) {
+        String discovery = request->getParam("discovery_enabled", true)->value();
+        config.discovery_enabled = (discovery == "true" || discovery == "1");
+    } else {
+        config.discovery_enabled = false;
+    }
+
+    bool success = mqttManager->saveMQTTConfig(config);
+
+    JsonDocument doc;
+    doc["success"] = success;
+    doc["message"] = success ? "MQTT configuration saved" : "Failed to save MQTT configuration";
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void AquariumWebServer::handleGetMQTTStatus(AsyncWebServerRequest *request) {
+    JsonDocument doc;
+    doc["connected"] = mqttManager->isConnected();
+    doc["status"] = mqttManager->getConnectionStatus();
+    doc["error"] = mqttManager->getLastError();
+
+    MQTTConfiguration config = mqttManager->getMQTTConfig();
+    doc["enabled"] = config.enabled;
+    doc["broker"] = String(config.broker_host) + ":" + String(config.broker_port);
+    doc["device_id"] = config.device_id;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+String AquariumWebServer::getUnitName() {
+    Preferences prefs;
+    if (!prefs.begin("system", true)) {
+        return "Kate's Aquarium #7";  // Default name
+    }
+    String name = prefs.getString("unit_name", "Kate's Aquarium #7");
+    prefs.end();
+    return name;
+}
+
+void AquariumWebServer::handleGetUnitName(AsyncWebServerRequest *request) {
+    JsonDocument doc;
+    doc["name"] = getUnitName();
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void AquariumWebServer::handleSaveUnitName(AsyncWebServerRequest *request) {
+    String unitName = "Kate's Aquarium #7";  // Default
+
+    if (request->hasParam("name", true)) {
+        unitName = request->getParam("name", true)->value();
+        // Limit length to 50 characters
+        if (unitName.length() > 50) {
+            unitName = unitName.substring(0, 50);
+        }
+    }
+
+    Preferences prefs;
+    bool success = false;
+
+    if (prefs.begin("system", false)) {
+        prefs.putString("unit_name", unitName);
+        prefs.end();
+        success = true;
+    }
+
+    JsonDocument doc;
+    doc["success"] = success;
+    doc["message"] = success ? "Unit name saved" : "Failed to save unit name";
+    doc["name"] = unitName;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
 String AquariumWebServer::generateCalibrationPage() {
     String html = R"rawliteral(<!DOCTYPE html>
 <html>
@@ -1003,6 +1197,23 @@ String AquariumWebServer::generateCalibrationPage() {
 
     <div id='messages'></div>
 
+    <!-- Unit Name Configuration Card -->
+    <div class='card'>
+        <h2>Unit Name Configuration</h2>
+        <div class='info'>
+            <strong>Customize your unit name:</strong><br>
+            This name will appear in the dashboard, charts, and data exports.
+        </div>
+
+        <div class='form-group'>
+            <label>Unit Name:</label>
+            <input type='text' id='unit_name' placeholder='e.g., Kate&apos;s Aquarium #7' maxlength='50' value='Kate&apos;s Aquarium #7'>
+            <small>Maximum 50 characters</small>
+        </div>
+
+        <button onclick='saveUnitName()'>Save Unit Name</button>
+    </div>
+
     <!-- Current Readings Card -->
     <div class='card'>
         <h2>Current Sensor Readings</h2>
@@ -1115,6 +1326,74 @@ String AquariumWebServer::generateCalibrationPage() {
         </div>
         <button onclick='calibrateEc()'>Calibrate EC</button>
         <button class='danger' onclick='clearEcCal()'>Clear EC Calibration</button>
+    </div>
+
+    <!-- MQTT Configuration Card -->
+    <div class='card'>
+        <h2>MQTT Configuration</h2>
+        <div id='mqttStatus' class='status'>Loading...</div>
+
+        <div class='info'>
+            <strong>MQTT Setup:</strong><br>
+            Configure MQTT broker connection to publish sensor data to Home Assistant or other MQTT subscribers.
+        </div>
+
+        <div class='form-group'>
+            <label>
+                <input type='checkbox' id='mqtt_enabled' onchange='updateMqttStatus()'>
+                Enable MQTT Publishing
+            </label>
+        </div>
+
+        <div class='form-group'>
+            <label>Broker Host/IP:</label>
+            <input type='text' id='mqtt_broker_host' placeholder='e.g., 192.168.1.100 or mqtt.local'>
+        </div>
+
+        <div class='form-group'>
+            <label>Broker Port:</label>
+            <input type='number' id='mqtt_broker_port' placeholder='1883' value='1883'>
+        </div>
+
+        <div class='form-group'>
+            <label>Device ID:</label>
+            <input type='text' id='mqtt_device_id' placeholder='e.g., aquarium' value='aquarium'>
+        </div>
+
+        <div class='form-group'>
+            <label>Publish Interval (ms):</label>
+            <input type='number' id='mqtt_publish_interval' placeholder='5000' value='5000'>
+            <small>Time between MQTT publishes (default: 5000ms)</small>
+        </div>
+
+        <div class='form-group'>
+            <label>Username (optional):</label>
+            <input type='text' id='mqtt_username' placeholder='MQTT username'>
+        </div>
+
+        <div class='form-group'>
+            <label>Password (optional):</label>
+            <input type='password' id='mqtt_password' placeholder='MQTT password'>
+        </div>
+
+        <div class='form-group'>
+            <label>
+                <input type='checkbox' id='mqtt_discovery'>
+                Enable Home Assistant MQTT Discovery
+            </label>
+        </div>
+
+        <div class='info'>
+            <strong>MQTT Topics:</strong><br>
+            • <code>aquarium/{device_id}/telemetry/temperature</code> - Temperature in °C<br>
+            • <code>aquarium/{device_id}/telemetry/orp</code> - ORP in mV<br>
+            • <code>aquarium/{device_id}/telemetry/ph</code> - pH value<br>
+            • <code>aquarium/{device_id}/telemetry/ec</code> - EC in mS/cm<br>
+            • <code>aquarium/{device_id}/telemetry/sensors</code> - Combined JSON payload
+        </div>
+
+        <button onclick='saveMqttConfig()'>Save MQTT Configuration</button>
+        <button onclick='testMqttConnection()'>Test Connection</button>
     </div>
 
     <script>
@@ -1299,11 +1578,117 @@ String AquariumWebServer::generateCalibrationPage() {
                 });
         }
 
+        function loadMqttConfig() {
+            fetch('/api/mqtt/config')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('mqtt_enabled').checked = data.enabled;
+                    document.getElementById('mqtt_broker_host').value = data.broker_host || '';
+                    document.getElementById('mqtt_broker_port').value = data.broker_port || 1883;
+                    document.getElementById('mqtt_device_id').value = data.device_id || 'aquarium';
+                    document.getElementById('mqtt_publish_interval').value = data.publish_interval_ms || 5000;
+                    document.getElementById('mqtt_username').value = data.username || '';
+                    document.getElementById('mqtt_password').value = data.password || '';
+                    document.getElementById('mqtt_discovery').checked = data.discovery_enabled || false;
+                });
+        }
+
+        function refreshMqttStatus() {
+            fetch('/api/mqtt/status')
+                .then(r => r.json())
+                .then(data => {
+                    const mqttDiv = document.getElementById('mqttStatus');
+                    if (data.connected) {
+                        mqttDiv.className = 'status calibrated';
+                        mqttDiv.innerHTML = `✓ CONNECTED<br>Broker: ${data.broker}<br>Device: ${data.device_id}`;
+                    } else if (data.enabled) {
+                        mqttDiv.className = 'status uncalibrated';
+                        mqttDiv.innerHTML = `⚠ ${data.status}<br>${data.error || ''}`;
+                    } else {
+                        mqttDiv.className = 'status';
+                        mqttDiv.textContent = 'MQTT Disabled';
+                    }
+                });
+        }
+
+        function saveMqttConfig() {
+            const params = new URLSearchParams();
+            params.append('enabled', document.getElementById('mqtt_enabled').checked);
+            params.append('broker_host', document.getElementById('mqtt_broker_host').value);
+            params.append('broker_port', document.getElementById('mqtt_broker_port').value);
+            params.append('device_id', document.getElementById('mqtt_device_id').value);
+            params.append('publish_interval_ms', document.getElementById('mqtt_publish_interval').value);
+            params.append('username', document.getElementById('mqtt_username').value);
+            params.append('password', document.getElementById('mqtt_password').value);
+            params.append('discovery_enabled', document.getElementById('mqtt_discovery').checked);
+
+            fetch('/api/mqtt/config', { method: 'POST', body: params })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                        setTimeout(refreshMqttStatus, 2000); // Refresh after connection attempt
+                    } else {
+                        showMessage(data.message, 'error');
+                    }
+                });
+        }
+
+        function testMqttConnection() {
+            saveMqttConfig(); // Save first, then check status
+            setTimeout(() => {
+                refreshMqttStatus();
+            }, 3000);
+        }
+
+        function updateMqttStatus() {
+            const enabled = document.getElementById('mqtt_enabled').checked;
+            const inputs = ['mqtt_broker_host', 'mqtt_broker_port', 'mqtt_device_id',
+                          'mqtt_publish_interval', 'mqtt_username', 'mqtt_password', 'mqtt_discovery'];
+            inputs.forEach(id => {
+                document.getElementById(id).disabled = !enabled;
+            });
+        }
+
+        function loadUnitName() {
+            fetch('/api/unit/name')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('unit_name').value = data.name || 'Kate\'s Aquarium #7';
+                });
+        }
+
+        function saveUnitName() {
+            const unitName = document.getElementById('unit_name').value;
+
+            if (!unitName || unitName.trim() === '') {
+                showMessage('Please enter a unit name', 'error');
+                return;
+            }
+
+            const params = new URLSearchParams();
+            params.append('name', unitName);
+
+            fetch('/api/unit/name', { method: 'POST', body: params })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message + ' - Refresh page to see updated name in headers', 'success');
+                    } else {
+                        showMessage(data.message, 'error');
+                    }
+                });
+        }
+
         // Initialize on page load
         initTheme();
         refreshReadings();
         refreshStatus();
+        loadMqttConfig();
+        refreshMqttStatus();
+        loadUnitName();
         setInterval(refreshReadings, 5000);
+        setInterval(refreshMqttStatus, 10000); // Update MQTT status every 10 seconds
     </script>
 </body>
 </html>
@@ -1314,7 +1699,10 @@ String AquariumWebServer::generateCalibrationPage() {
 
 
 String AquariumWebServer::generateChartsPage() {
-    return String(CHARTS_PAGE_HTML);
+    String html = String(CHARTS_PAGE_HTML);
+    // Replace the hardcoded unit name with the actual unit name
+    html.replace("Kate's Aquarium #7 Analytics", getUnitName() + " Analytics");
+    return html;
 }
 
 void AquariumWebServer::handleExportCSV(AsyncWebServerRequest *request) {
@@ -1322,7 +1710,7 @@ void AquariumWebServer::handleExportCSV(AsyncWebServerRequest *request) {
 
     // Header with metadata
     csv += "# Aquarium Monitor Data Export\r\n";
-    csv += "# Device: Kate's Aquarium #7 | Export time: ";
+    csv += "# Device: " + getUnitName() + " | Export time: ";
 
     time_t now = time(nullptr);
     if (now > 100000) {
@@ -1407,7 +1795,7 @@ void AquariumWebServer::handleExportJSON(AsyncWebServerRequest *request) {
     time_t now = time(nullptr);
 
     // Device metadata
-    doc["device"]["name"] = "Kate's Aquarium #7";
+    doc["device"]["name"] = getUnitName();
     if (now > 100000) {
         doc["device"]["export_timestamp"] = (long long)now;
     } else {

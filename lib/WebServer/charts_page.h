@@ -231,6 +231,9 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             <span id='statusText'>Connecting...</span>
         </div>
         <div class='status-item'>
+            <span id='mqttIndicator'>📊 MQTT: <span id='mqttStatus'>Checking...</span></span>
+        </div>
+        <div class='status-item'>
             <span>⏱️ Update: <span id='lastUpdate'>--</span></span>
         </div>
         <div class='status-item'>
@@ -573,13 +576,36 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             }
         }
 
+        function updateMqttStatus() {
+            fetch('/api/mqtt/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusEl = document.getElementById('mqttStatus');
+                    if (data.connected) {
+                        statusEl.textContent = '✓ Connected';
+                        statusEl.style.color = '#10b981';
+                    } else if (data.enabled) {
+                        statusEl.textContent = '⚠ ' + data.status;
+                        statusEl.style.color = '#f59e0b';
+                    } else {
+                        statusEl.textContent = 'Disabled';
+                        statusEl.style.color = '#64748b';
+                    }
+                })
+                .catch(err => {
+                    console.error('MQTT status fetch failed:', err);
+                });
+        }
+
         initTheme();
         initCharts();
         fetchHistory();
         fetchCurrentData();
+        updateMqttStatus();
 
         setInterval(fetchHistory, 5000);
         setInterval(fetchCurrentData, 2000);
+        setInterval(updateMqttStatus, 5000);
     </script>
 </body>
 </html>

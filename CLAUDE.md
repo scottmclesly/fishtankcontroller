@@ -126,51 +126,101 @@ This controller manages life-support equipment and potentially mains-powered dev
 - **EC:** Cell constant calibration using known conductivity solution with temperature compensation
 - Calibration data must be persisted to flash/EEPROM
 
-### MQTT Topics Structure
+### MQTT Implementation ✅
 
-Base topic: `aquarium/<device_id>/...`
+**Status:** FULLY IMPLEMENTED
 
-Suggested topic hierarchy:
-- `telemetry/raw` - Raw sensor readings
-- `telemetry/normalized` - Engineering units (°C, mV, pH, mS/cm)
-- `state/outputs` - Current output states
-- `cmd/output/<name>` - Set output command
-- `cmd/config` - Configuration updates
+**Base topic:** `aquarium/<device_id>/...`
 
-Example normalized telemetry payload:
+**Published topics:**
+- `aquarium/<device_id>/telemetry/temperature` - Temperature in °C (float)
+- `aquarium/<device_id>/telemetry/orp` - ORP in mV (float)
+- `aquarium/<device_id>/telemetry/ph` - pH value (float)
+- `aquarium/<device_id>/telemetry/ec` - EC in mS/cm (float)
+- `aquarium/<device_id>/telemetry/sensors` - Combined JSON payload (all sensors)
+
+**Home Assistant Discovery topics:**
+- `homeassistant/sensor/<device_id>/temperature/config`
+- `homeassistant/sensor/<device_id>/orp/config`
+- `homeassistant/sensor/<device_id>/ph/config`
+- `homeassistant/sensor/<device_id>/ec/config`
+
+**Implementation details:**
+- Location: `lib/MQTTManager/` (MQTTManager.h/cpp)
+- Library: PubSubClient v2.8
+- Configuration storage: ESP32 NVS (persistent)
+- Features:
+  - Configurable broker host/port
+  - Username/password authentication
+  - Configurable device ID and publish intervals
+  - Home Assistant MQTT Discovery
+  - Automatic reconnection (5-second retry interval)
+  - Web-based configuration interface
+  - Real-time connection status monitoring
+
+**Combined telemetry payload example:**
 ```json
 {
-  "ts": 0,
-  "temp_c": 0.0,
-  "orp_mv": 0.0,
-  "ph": 0.0,
-  "ec_ms_cm": 0.0,
-  "salinity_ppt": null,
-  "device": {
-    "id": "",
-    "fw": ""
-  }
+  "temperature_c": 25.5,
+  "orp_mv": 350.2,
+  "ph": 7.8,
+  "ec_ms_cm": 1.234,
+  "valid": true,
+  "timestamp": 123456789
 }
 ```
 
-## Current Roadmap (from README)
+**Configuration via Web UI:**
+Navigate to `http://aquarium.local/calibration` → MQTT Configuration section
 
-Priority order for implementation:
+## Current Implementation Status
 
-1. ✅ Decide MCU + firmware framework (ESP32-S3 + ESP-IDF recommended, but currently using C3 + Arduino)
-2. ⏳ POET driver + raw I2C reads
-3. ⏳ REST API + WebSocket live feed
-4. ⏳ On-device Web UI MVP
-5. ⏳ Calibration storage + workflow
-6. ⏳ MQTT publisher + command topics
-7. ⏳ Home Assistant MQTT Discovery
-8. ⏳ Flutter dashboard MVP
-9. ⏳ Output control with failsafes
-10. ⏳ Logging (flash/SD/remote)
+### ✅ Completed Features
+
+1. ✅ **MCU + firmware framework** - ESP32-C3 with Arduino framework
+2. ✅ **POET driver** - Full I2C communication with raw reads (address 0x1F, 400kHz)
+3. ✅ **WiFi stack** - Connection management, NVS credential storage, AP provisioning mode
+4. ✅ **REST API** - Comprehensive endpoints for sensors, history, calibration, export, MQTT config
+5. ✅ **Web UI** - Dashboard, Charts, Calibration pages with dark/light themes
+6. ✅ **Data history** - 288-point circular buffer with 5-second intervals
+7. ✅ **Data export** - CSV and JSON export via web UI and console commands
+8. ✅ **Calibration system** - pH (1-point/2-point) and EC (cell constant) with NVS persistence
+9. ✅ **MQTT publisher** - Full implementation with broker configuration
+10. ✅ **MQTT telemetry** - Individual sensor topics + combined JSON payload
+11. ✅ **Home Assistant MQTT Discovery** - Automatic entity registration
+12. ✅ **MQTT configuration UI** - Web-based setup with connection testing
+13. ✅ **Status monitoring** - Real-time MQTT connection indicators on all pages
+14. ✅ **Console interface** - Serial commands for debugging and data export
+
+### 🚧 Planned Features
+
+- WebSocket live feed (currently using HTTP polling)
+- Flutter dashboard MVP
+- Output control with failsafes
+- Scheduled automation and rules engine
+- Long-term logging (flash/SD/remote)
+- TLS/SSL for secure MQTT
+- OTA firmware updates
 
 ## Key Files
 
-- [README.md](README.md) - Comprehensive project documentation
-- [platformio.ini](platformio.ini) - Build configuration
-- [src/main.cpp](src/main.cpp) - Main firmware entry point (currently stub code)
+### Documentation
+- [README.md](README.md) - Comprehensive project documentation with full feature details
+- [CLAUDE.md](CLAUDE.md) - This file - development context for AI assistants
 - [docs/Sonetron ConeFET I2C protocol.pdf](docs/Sonetron%20ConeFET%20I2C%20protocol.pdf) - POET sensor I2C protocol specification
+
+### Build Configuration
+- [platformio.ini](platformio.ini) - PlatformIO build config (ESP32-C3, libraries)
+
+### Firmware Core
+- [src/main.cpp](src/main.cpp) - Main firmware entry point, sensor loop, MQTT integration
+
+### Libraries
+- [lib/WiFiManager/](lib/WiFiManager/) - WiFi connection and provisioning AP
+- [lib/WebServer/](lib/WebServer/) - Async web server, REST API, HTML pages
+- [lib/CalibrationManager/](lib/CalibrationManager/) - pH/EC calibration with NVS storage
+- [lib/MQTTManager/](lib/MQTTManager/) - MQTT client, broker config, HA Discovery
+
+### Web UI Components
+- [lib/WebServer/WebServer.cpp](lib/WebServer/WebServer.cpp) - Dashboard, calibration page generation
+- [lib/WebServer/charts_page.h](lib/WebServer/charts_page.h) - Charts page HTML with Chart.js

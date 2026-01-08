@@ -10,6 +10,7 @@
 struct POETResult;
 class WiFiManager;
 class CalibrationManager;
+class MQTTManager;
 
 // Data history configuration
 #define HISTORY_SIZE 288  // 288 points = 24 hours at 5-minute intervals (or 24 min at 5s intervals)
@@ -26,7 +27,7 @@ struct DataPoint {
 
 class AquariumWebServer {
 public:
-    AquariumWebServer(WiFiManager* wifiMgr, CalibrationManager* calMgr);
+    AquariumWebServer(WiFiManager* wifiMgr, CalibrationManager* calMgr, MQTTManager* mqttMgr);
 
     // Initialize web server
     void begin();
@@ -52,6 +53,7 @@ private:
     AsyncWebServer server;
     WiFiManager* wifiManager;
     CalibrationManager* calibrationManager;
+    MQTTManager* mqttManager;
 
     // Latest sensor readings (raw)
     int32_t raw_temp_mC;
@@ -102,6 +104,11 @@ private:
     void handleChartsPage(AsyncWebServerRequest *request);
     void handleExportCSV(AsyncWebServerRequest *request);
     void handleExportJSON(AsyncWebServerRequest *request);
+    void handleGetMQTTConfig(AsyncWebServerRequest *request);
+    void handleSaveMQTTConfig(AsyncWebServerRequest *request);
+    void handleGetMQTTStatus(AsyncWebServerRequest *request);
+    void handleGetUnitName(AsyncWebServerRequest *request);
+    void handleSaveUnitName(AsyncWebServerRequest *request);
 
     // HTML page generators
     String generateHomePage();
@@ -111,6 +118,9 @@ private:
 
     // History management
     void addDataPointToHistory();
+
+    // Helper methods
+    String getUnitName();
 };
 
 #endif // WEB_SERVER_H

@@ -192,6 +192,20 @@ The device now includes a fully functional web interface with:
 - Responsive design works on desktop, tablet, and mobile
 - Visual warnings for uncalibrated sensors
 - WiFi connection status and signal strength
+- **MQTT connection status indicator** showing real-time broker connectivity
+
+**Sensor Calibration Interface:**
+- pH calibration (1-point or 2-point with buffer solutions)
+- EC calibration (cell constant determination with known solutions)
+- Real-time raw sensor readings display
+- Calibration status tracking with NVS persistence
+- **MQTT configuration panel** with broker setup and connection testing
+
+**Historical Data & Charts:**
+- 288-point circular buffer (24 minutes at 5-second intervals)
+- Real-time chart visualization with Chart.js
+- Data export in CSV and JSON formats
+- **MQTT status monitoring** on charts page
 
 **WiFi Provisioning:**
 - Automatic fallback to AP mode when no credentials stored or connection fails
@@ -203,9 +217,17 @@ The device now includes a fully functional web interface with:
 **API Endpoints:**
 - `GET /` - Main dashboard (sensor view or provisioning based on mode)
 - `GET /api/sensors` - JSON sensor data for programmatic access
+- `GET /api/history` - Historical sensor data (288-point buffer)
+- `GET /api/export/csv` - Export data in CSV format
+- `GET /api/export/json` - Export data in JSON format
+- `GET /calibration` - Sensor calibration interface
+- `GET /charts` - Historical data visualization
 - `GET /setup` - Provisioning configuration page
 - `POST /save-wifi` - Save WiFi credentials
 - `GET /scan` - Scan for available networks
+- `GET /api/mqtt/config` - Get MQTT configuration
+- `POST /api/mqtt/config` - Save MQTT configuration
+- `GET /api/mqtt/status` - Get MQTT connection status
 
 ### Access Methods
 - **mDNS:** `http://aquarium.local` (when connected to WiFi)
@@ -253,37 +275,69 @@ The device now includes a fully functional web interface with:
 - **Transport:** HTTP REST + WebSocket to the controller (same API the Web UI uses)
 
 ## Data + integrations
-### MQTT (planned)
-MQTT is the preferred “gateway” into **Home Assistant** and other automation stacks.
+### MQTT ✅ (IMPLEMENTED)
+MQTT is the preferred "gateway" into **Home Assistant** and other automation stacks.
 
-- Supports **Home Assistant MQTT Discovery** so entities appear automatically.
-- Allows multiple consumers (HA + Node-RED + your own logger) without coupling.
+**Features:**
+- ✅ **Fully implemented** MQTT client with automatic reconnection
+- ✅ **Home Assistant MQTT Discovery** - entities appear automatically
+- ✅ Configurable broker host, port, and authentication
+- ✅ Configurable device ID and publish intervals
+- ✅ Persistent configuration stored in NVS
+- ✅ Web-based configuration interface with connection testing
+- ✅ Real-time status indicators on Dashboard and Charts pages
+- Allows multiple consumers (HA + Node-RED + your own logger) without coupling
 
 **Base topic**: `aquarium/<device_id>/...`
 
-Suggested topics:
-- `.../telemetry/raw` (raw sensor fields)
-- `.../telemetry/normalized` (engineering units)
-- `.../state/outputs` (current output states)
-- `.../cmd/output/<name>` (set output)
-- `.../cmd/config` (push config)
+**Published Topics:**
+- `aquarium/<device_id>/telemetry/temperature` - Temperature in °C (individual topic)
+- `aquarium/<device_id>/telemetry/orp` - ORP in mV (individual topic)
+- `aquarium/<device_id>/telemetry/ph` - pH value (individual topic)
+- `aquarium/<device_id>/telemetry/ec` - EC in mS/cm (individual topic)
+- `aquarium/<device_id>/telemetry/sensors` - Combined JSON payload (all sensors)
 
-### Data model (draft)
-Normalized telemetry payload (example):
+**Home Assistant Discovery Topics** (when enabled):
+- `homeassistant/sensor/<device_id>/temperature/config`
+- `homeassistant/sensor/<device_id>/orp/config`
+- `homeassistant/sensor/<device_id>/ph/config`
+- `homeassistant/sensor/<device_id>/ec/config`
+
+### MQTT Configuration
+
+**Via Web Interface:**
+1. Navigate to `http://aquarium.local/calibration`
+2. Scroll to **MQTT Configuration** section
+3. Configure settings:
+   - **Enable MQTT Publishing** - Toggle to enable/disable
+   - **Broker Host/IP** - Your MQTT broker address (e.g., `192.168.1.100`, `homeassistant.local`)
+   - **Broker Port** - Default `1883` (standard MQTT)
+   - **Device ID** - Unique identifier (e.g., `aquarium`, `reef_tank`, `freshwater1`)
+   - **Publish Interval** - How often to publish data in milliseconds (default: 5000ms)
+   - **Username/Password** - Optional authentication credentials
+   - **Home Assistant MQTT Discovery** - Toggle to auto-register sensors in HA
+4. Click **Save MQTT Configuration**
+5. Use **Test Connection** to verify settings
+6. Monitor connection status on Dashboard or Charts page
+
+**Via Configuration File** (stored in NVS):
+- Configuration persists across reboots
+- Modify via web interface or clear NVS to reset
+
+### Data model
+Combined sensor telemetry payload (`aquarium/<device_id>/telemetry/sensors`):
 ```json
 {
-  "ts": 0,
-  "temp_c": 0.0,
-  "orp_mv": 0.0,
-  "ph": 0.0,
-  "ec_ms_cm": 0.0,
-  "salinity_ppt": null,
-  "device": {
-    "id": "",
-    "fw": ""
-  }
+  "temperature_c": 25.5,
+  "orp_mv": 350.2,
+  "ph": 7.8,
+  "ec_ms_cm": 1.234,
+  "valid": true,
+  "timestamp": 123456789
 }
 ```
+
+Individual sensor topics publish simple float values for easy integration.
 
 ---
 
@@ -370,12 +424,28 @@ On first boot, the device will start in provisioning mode:
 - Current: 5-second interval (hardcoded in main loop)
 - Future: Configurable via web interface
 
+**MQTT (via Web UI - Calibration Page):**
+- ✅ Broker host/IP address
+- ✅ Broker port (default: 1883)
+- ✅ Device ID (topic prefix)
+- ✅ Publish interval (milliseconds)
+- ✅ Username/password authentication
+- ✅ Home Assistant MQTT Discovery toggle
+- ✅ Enable/disable MQTT publishing
+- ✅ Connection testing and status monitoring
+- Stored in NVS (persistent across reboots)
+
+**Calibration (via Web UI - Calibration Page):**
+- ✅ pH calibration (1-point offset or 2-point offset+slope)
+- ✅ EC calibration (cell constant with known solution)
+- ✅ Calibration status tracking
+- ✅ Stored in NVS (persistent across reboots)
+
 ### Planned Configuration Options
-- MQTT: broker host/port, auth, TLS, base topic
-- Sampling rate: User-configurable interval
+- Sampling rate: User-configurable interval (currently hardcoded at 5 seconds)
 - Output mapping: names, GPIOs, safety defaults
 - Alerts: thresholds for pH/ORP/EC/temperature
-- Calibration values: pH offset/slope, EC cell constant
+- TLS/SSL for secure MQTT connections
 
 ---
 
@@ -498,13 +568,56 @@ This is the easiest method if you're already using the web interface!
 ## Calibration
 > NOTE: Calibration is required for meaningful pH and EC values.
 
-### pH
-- Record sensor output in known buffer(s).
-- Use 1-point (offset) or 2-point (offset + slope) calibration.
+### Accessing the Calibration Interface
+Navigate to `http://aquarium.local/calibration` to access:
+- **Real-time sensor readings** for calibration reference
+- **pH calibration tools** (1-point and 2-point)
+- **EC calibration tools** (cell constant determination)
+- **MQTT configuration** (broker setup and connection management)
+- **Calibration status indicators**
 
-### EC / Conductivity
-- Calibrate the cell constant using a known conductivity solution.
-- Apply temperature compensation (TBD).
+### pH Calibration
+**1-Point Calibration (Offset Only):**
+1. Prepare a pH buffer solution (pH 4.0, 7.0, or 10.0)
+2. Rinse sensor with distilled water and immerse in buffer
+3. Wait 1-2 minutes for reading to stabilize
+4. Click "Refresh Readings" to get current Ugs voltage
+5. Enter buffer pH and measured Ugs voltage
+6. Click "Calibrate pH (1-Point)"
+
+**2-Point Calibration (Offset + Slope - Recommended):**
+1. Prepare two pH buffer solutions (typically pH 4.0 and 7.0)
+2. For first buffer:
+   - Rinse sensor and immerse
+   - Wait for stabilization
+   - Record buffer pH and Ugs voltage
+3. For second buffer:
+   - Rinse sensor thoroughly
+   - Immerse in second buffer
+   - Wait for stabilization
+   - Record buffer pH and Ugs voltage
+4. Enter both measurements and click "Calibrate pH (2-Point)"
+
+Calibration data is stored in NVS and persists across reboots.
+
+### EC / Conductivity Calibration
+**Cell Constant Calibration:**
+1. Prepare a known conductivity solution:
+   - 0.01M KCl: 1.41 mS/cm @ 25°C
+   - 0.1M KCl: 12.88 mS/cm @ 25°C
+   - 1M KCl: 111.9 mS/cm @ 25°C
+2. Rinse sensor with distilled water and immerse in solution
+3. Wait 1-2 minutes for reading to stabilize
+4. Measure solution temperature accurately
+5. Click "Refresh Readings" to get current EC measurements
+6. Enter:
+   - Known conductivity (mS/cm)
+   - Solution temperature (°C)
+   - Measured EC current (nA)
+   - Measured EC voltage (μV)
+7. Click "Calibrate EC"
+
+The system calculates and stores the cell constant with automatic temperature compensation. Calibration data persists in NVS.
 
 ---
 
@@ -517,18 +630,40 @@ This is the easiest method if you're already using the web interface!
 ---
 
 ## Roadmap
+
+### ✅ Completed
 - [x] Decide MCU + firmware framework (ESP32-C3 + Arduino for prototyping)
-- [x] POET driver + raw reads
+- [x] POET driver + raw I2C reads
 - [x] WiFi connection stack with credential storage and provisioning AP
 - [x] On-device Web UI MVP for sensor monitoring
-- [ ] REST API expansion (configuration, calibration endpoints)
-- [ ] WebSocket live feed (currently using polling)
-- [ ] Calibration storage + workflow
-- [ ] MQTT publisher + command topics
-- [ ] Home Assistant MQTT Discovery
-- [ ] Flutter dashboard MVP
-- [ ] Output control with failsafes
-- [ ] Logging (flash/SD/remote)
+- [x] REST API for sensor data, history, and configuration
+- [x] Historical data tracking with circular buffer (288 points)
+- [x] Data export (CSV and JSON formats via web UI and console)
+- [x] Real-time charts page with Chart.js visualization
+- [x] Calibration storage + workflow (pH 1-point/2-point, EC cell constant)
+- [x] Calibration web interface with real-time readings
+- [x] **MQTT publisher with configurable broker settings**
+- [x] **MQTT telemetry publishing (individual topics + combined JSON)**
+- [x] **Home Assistant MQTT Discovery integration**
+- [x] **MQTT configuration interface in web UI**
+- [x] **MQTT connection status monitoring**
+- [x] Console command interface for debugging and data export
+- [x] Dark/light theme toggle across all pages
+- [x] Responsive mobile-friendly design
+
+### 🚧 In Progress / Planned
+- [ ] WebSocket live feed (currently using HTTP polling - works but could be more efficient)
+- [ ] Flutter dashboard MVP (cross-platform mobile/desktop app)
+- [ ] Output control with failsafes (relay/driver support)
+- [ ] Scheduled automation and rules engine
+- [ ] Alert thresholds and notifications
+- [ ] User-configurable sampling rate (currently 5 seconds, hardcoded)
+- [ ] Long-term logging (flash/SD card/remote database)
+- [ ] TLS/SSL support for secure MQTT
+- [ ] OTA (Over-The-Air) firmware updates
+- [ ] Multi-device support and device discovery
+- [ ] Additional sensor integrations (flow, level, leak detection)
+- [ ] Migration to ESP-IDF framework for production robustness
 
 ---
 
@@ -587,6 +722,47 @@ This is the easiest method if you're already using the web interface!
 - Verify correct COM port selected
 - Try putting ESP32-C3 in bootloader mode (hold BOOT button while connecting)
 - Check drivers for USB-to-serial chip
+
+### MQTT Issues
+**MQTT shows "Disconnected" or "Connection failed":**
+- Verify MQTT broker is running and accessible on the network
+- Check broker IP/hostname is correct in configuration
+- Ensure broker port is correct (usually 1883 for unencrypted)
+- Verify username/password if authentication is required
+- Check firewall rules aren't blocking MQTT traffic
+- Test broker connectivity from another MQTT client (MQTT Explorer, mosquitto_sub)
+
+**MQTT connects but data not appearing in Home Assistant:**
+- Verify MQTT integration is configured in Home Assistant
+- Check that HA is connected to the same MQTT broker
+- Enable "Home Assistant MQTT Discovery" in aquarium controller settings
+- Look in HA's MQTT integration for discovered devices
+- Check HA logs for MQTT discovery messages
+- Verify topics in MQTT Explorer match expected format
+
+**MQTT "Enabled" checkbox doesn't stay checked:**
+- Make sure you click "Save MQTT Configuration" after enabling
+- Check serial monitor for NVS save errors
+- Verify device has sufficient free flash memory
+
+**High latency or missed messages:**
+- Reduce publish interval to reduce network load
+- Check WiFi signal strength (shown on dashboard)
+- Verify MQTT broker isn't overloaded
+- Consider QoS settings (future enhancement)
+
+**Testing MQTT without Home Assistant:**
+Use MQTT Explorer or command-line tools:
+```bash
+# Subscribe to all aquarium topics
+mosquitto_sub -h <broker_ip> -t "aquarium/#" -v
+
+# Subscribe to specific sensor
+mosquitto_sub -h <broker_ip> -t "aquarium/aquarium/telemetry/temperature" -v
+
+# With authentication
+mosquitto_sub -h <broker_ip> -u username -P password -t "aquarium/#" -v
+```
 
 ---
 

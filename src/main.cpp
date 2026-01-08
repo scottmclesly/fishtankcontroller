@@ -4,6 +4,7 @@
 #include "WiFiManager.h"
 #include "WebServer.h"
 #include "CalibrationManager.h"
+#include "MQTTManager.h"
 
 // POET Sensor I2C Configuration
 #define POET_I2C_ADDR 0x1F
@@ -37,6 +38,7 @@ struct POETResult {
 // Global objects
 WiFiManager wifiManager;
 CalibrationManager calibrationManager;
+MQTTManager mqttManager;
 AquariumWebServer* webServer = nullptr;
 
 // Function prototypes
@@ -79,8 +81,16 @@ void setup() {
     Serial.println("Error setting up mDNS responder!");
   }
 
+  // Initialize MQTT Manager
+  if (!mqttManager.begin()) {
+    Serial.println("WARNING: Failed to initialize MQTT manager");
+  } else {
+    Serial.println("MQTT Manager initialized");
+  }
+  Serial.println();
+
   // Initialize Web Server
-  webServer = new AquariumWebServer(&wifiManager, &calibrationManager);
+  webServer = new AquariumWebServer(&wifiManager, &calibrationManager, &mqttManager);
   webServer->begin();
 
   if (wifiConnected) {
@@ -122,6 +132,9 @@ void loop() {
   if (webServer != nullptr) {
     webServer->loop();
   }
+
+  // Handle MQTT connection and publishing
+  mqttManager.loop();
 
   POETResult result;
 
@@ -171,6 +184,20 @@ void loop() {
       Serial.println(" mS/cm (uncalibrated - needs known solution!)");
     } else {
       Serial.println(" mS/cm (calibrated)");
+    }
+
+    // Publish to MQTT if connected
+    SensorData sensorData;
+    sensorData.temp_c = temp_C;
+    sensorData.orp_mv = orp_mV;
+    sensorData.ph = pH;
+    sensorData.ec_ms_cm = ec_mS_cm;
+    sensorData.valid = result.valid;
+
+    if (mqttManager.publishSensorData(sensorData)) {
+      Serial.println("\nMQTT: Sensor data published");
+    } else if (mqttManager.isConnected()) {
+      Serial.println("\nMQTT: Failed to publish (will retry)");
     }
 
     // Calculate resistance for EC measurement
