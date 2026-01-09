@@ -23,6 +23,13 @@ struct SensorData {
     float orp_mv;
     float ph;
     float ec_ms_cm;
+    // Derived metrics
+    float tds_ppm;
+    float co2_ppm;
+    float nh3_ratio;
+    float nh3_ppm;
+    float max_do_mg_l;
+    float stocking_density;
     bool valid;
 };
 

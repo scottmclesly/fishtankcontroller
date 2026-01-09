@@ -2,6 +2,8 @@
 #include "WiFiManager.h"
 #include "CalibrationManager.h"
 #include "MQTTManager.h"
+#include "TankSettingsManager.h"
+#include "DerivedMetrics.h"
 #include "charts_page.h"
 #include <WiFi.h>
 #include <Preferences.h>
@@ -17,14 +19,19 @@ struct POETResult {
 };
 
 AquariumWebServer::AquariumWebServer(WiFiManager* wifiMgr, CalibrationManager* calMgr, MQTTManager* mqttMgr)
-    : server(80), wifiManager(wifiMgr), calibrationManager(calMgr), mqttManager(mqttMgr),
+    : server(80), wifiManager(wifiMgr), calibrationManager(calMgr), mqttManager(mqttMgr), tankSettingsManager(nullptr),
       raw_temp_mC(0), raw_orp_uV(0), raw_ugs_uV(0), raw_ec_nA(0), raw_ec_uV(0),
       temp_c(0), orp_mv(0), ph(0), ec_ms_cm(0), lastUpdate(0), dataValid(false),
+      tds_ppm(0), co2_ppm(0), toxic_ammonia_ratio(0), nh3_ppm(0), max_do_mg_l(0), stocking_density(0),
       historyHead(0), historyCount(0), lastHistoryUpdate(0), ntpInitialized(false) {
     // Initialize history buffer
     for (int i = 0; i < HISTORY_SIZE; i++) {
         history[i].valid = false;
     }
+}
+
+void AquariumWebServer::setTankSettingsManager(TankSettingsManager* mgr) {
+    tankSettingsManager = mgr;
 }
 
 void AquariumWebServer::begin() {
@@ -80,6 +87,13 @@ void AquariumWebServer::addDataPointToHistory() {
     dp.orp_mv = orp_mv;
     dp.ph = ph;
     dp.ec_ms_cm = ec_ms_cm;
+    // Add derived metrics
+    dp.tds_ppm = tds_ppm;
+    dp.co2_ppm = co2_ppm;
+    dp.toxic_ammonia_ratio = toxic_ammonia_ratio;
+    dp.nh3_ppm = nh3_ppm;
+    dp.max_do_mg_l = max_do_mg_l;
+    dp.stocking_density = stocking_density;
     dp.valid = dataValid;
 
     history[historyHead] = dp;
@@ -188,6 +202,37 @@ void AquariumWebServer::setupRoutes() {
 
     server.on("/api/unit/name", HTTP_POST, [this](AsyncWebServerRequest *request) {
         this->handleSaveUnitName(request);
+    });
+
+    // Derived metrics API endpoint
+    server.on("/api/metrics/derived", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetDerivedMetrics(request);
+    });
+
+    // Tank settings API endpoints
+    server.on("/api/settings/tank", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetTankSettings(request);
+    });
+
+    server.on("/api/settings/tank", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        this->handleSaveTankSettings(request);
+    });
+
+    // Fish profile API endpoints
+    server.on("/api/settings/fish", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetFishList(request);
+    });
+
+    server.on("/api/settings/fish/add", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        this->handleAddFish(request);
+    });
+
+    server.on("/api/settings/fish/remove", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        this->handleRemoveFish(request);
+    });
+
+    server.on("/api/settings/fish/clear", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        this->handleClearFish(request);
     });
 
     // 404 handler
@@ -301,13 +346,47 @@ void AquariumWebServer::updateSensorData(const POETResult& result) {
     // EC calculation (uses calibration if available)
     ec_ms_cm = calibrationManager->calculateEC(result.ec_nA, result.ec_uV, temp_c);
 
+    // Calculate derived metrics (if tank settings manager is available)
+    if (tankSettingsManager != nullptr) {
+        TankSettings& settings = tankSettingsManager->getSettings();
+
+        // TDS from EC
+        tds_ppm = DerivedMetrics::calculateTDS(ec_ms_cm, settings.tds_conversion_factor);
+
+        // CO2 from pH and KH
+        co2_ppm = DerivedMetrics::calculateCO2(ph, settings.manual_kh_dkh);
+
+        // Toxic ammonia ratio and actual NH3
+        toxic_ammonia_ratio = DerivedMetrics::calculateToxicAmmoniaRatio(temp_c, ph);
+        nh3_ppm = DerivedMetrics::calculateActualNH3(settings.manual_tan_ppm, toxic_ammonia_ratio);
+
+        // Maximum dissolved oxygen
+        max_do_mg_l = DerivedMetrics::calculateMaxDO(temp_c);
+
+        // Stocking density
+        float total_fish_length = tankSettingsManager->getTotalStockingLength();
+        float tank_volume = settings.calculated_volume_liters;
+        if (tank_volume <= 0.0 && settings.manual_volume_liters > 0.0) {
+            tank_volume = settings.manual_volume_liters;
+        }
+        stocking_density = DerivedMetrics::calculateStockingDensity(total_fish_length, tank_volume);
+    } else {
+        // No tank settings available, use defaults
+        tds_ppm = DerivedMetrics::calculateTDS(ec_ms_cm, 0.64);
+        co2_ppm = DerivedMetrics::calculateCO2(ph, 4.0);
+        toxic_ammonia_ratio = DerivedMetrics::calculateToxicAmmoniaRatio(temp_c, ph);
+        nh3_ppm = 0.0;
+        max_do_mg_l = DerivedMetrics::calculateMaxDO(temp_c);
+        stocking_density = 0.0;
+    }
+
     lastUpdate = millis();
     dataValid = true;
 }
 
 String AquariumWebServer::generateHomePage() {
     String html;
-    html.reserve(16000);  // Pre-allocate memory for large HTML page (increased from 12000)
+    html.reserve(24000);  // Pre-allocate memory for large HTML page (increased for derived metrics)
     html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
     html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
     html += "<link rel='icon' href='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><text y=\".9em\" font-size=\"90\">🐠</text></svg>'>";
@@ -330,10 +409,17 @@ String AquariumWebServer::generateHomePage() {
     html += "  --orp-color: #f59e0b;";
     html += "  --ph-color: #10b981;";
     html += "  --ec-color: #3b82f6;";
+    html += "  --tds-color: #3b82f6;";
+    html += "  --co2-color: #10b981;";
+    html += "  --nh3-color: #f59e0b;";
+    html += "  --do-color: #06b6d4;";
+    html += "  --stock-color: #8b5cf6;";
     html += "  --warning-bg: #7f6003;";
     html += "  --warning-text: #fff3cd;";
     html += "  --success-bg: #2e7d32;";
     html += "  --success-text: #c8e6c9;";
+    html += "  --danger-bg: #dc2626;";
+    html += "  --danger-text: #fecaca;";
     html += "}";
     html += "[data-theme='light'] {";
     html += "  --bg-primary: #f8fafc;";
@@ -373,6 +459,11 @@ String AquariumWebServer::generateHomePage() {
     html += ".sensor-status { font-size: 0.75em; margin-top: 8px; padding: 4px 8px; border-radius: 4px; display: inline-block; }";
     html += ".calibrated { background: var(--success-bg); color: var(--success-text); }";
     html += ".uncalibrated { background: var(--warning-bg); color: var(--warning-text); }";
+    html += ".alert-badge { font-size: 0.75em; margin-top: 8px; padding: 6px 12px; border-radius: 6px; display: inline-block; font-weight: 600; }";
+    html += ".alert-danger { background: var(--danger-bg); color: var(--danger-text); }";
+    html += ".alert-success { background: var(--success-bg); color: var(--success-text); }";
+    html += ".alert-warning { background: var(--warning-bg); color: var(--warning-text); }";
+    html += ".section-title { font-size: 1.3em; font-weight: 600; color: var(--text-primary); margin: 30px 0 15px 0; padding-left: 10px; border-left: 4px solid var(--color-primary); }";
     html += ".warning-banner { background: var(--warning-bg); color: var(--warning-text); padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid var(--border-color); }";
     html += ".warning-banner a { color: var(--warning-text); text-decoration: underline; font-weight: bold; }";
     html += ".info-footer { text-align: center; padding: 15px; background: var(--bg-card); border-radius: 10px; margin-top: 20px; border: 1px solid var(--border-color); font-size: 0.85em; color: var(--text-secondary); }";
@@ -426,6 +517,46 @@ String AquariumWebServer::generateHomePage() {
     html += "        statusEl.style.color = 'var(--text-tertiary)';";
     html += "      }";
     html += "    });";
+    html += "}\n";
+    html += "function updateDerivedMetrics() {";
+    html += "  fetch('/api/metrics/derived')";
+    html += "    .then(response => response.json())";
+    html += "    .then(data => {";
+    html += "      if (data.valid) {";
+    html += "        document.getElementById('tds').textContent = parseFloat(data.tds_ppm).toFixed(1);";
+    html += "        document.getElementById('co2').textContent = parseFloat(data.co2_ppm).toFixed(2);";
+    html += "        document.getElementById('nh3_ratio').textContent = parseFloat(data.toxic_ammonia_ratio).toFixed(2);";
+    html += "        document.getElementById('nh3_ppm').textContent = parseFloat(data.nh3_ppm).toFixed(4);";
+    html += "        document.getElementById('max_do').textContent = parseFloat(data.max_do_mg_l).toFixed(2);";
+    html += "        document.getElementById('stock').textContent = parseFloat(data.stocking_density).toFixed(2);";
+    html += "        const co2Val = parseFloat(data.co2_ppm);";
+    html += "        const co2Card = document.getElementById('co2Card');";
+    html += "        if (co2Val >= 15 && co2Val <= 30) {";
+    html += "          co2Card.style.setProperty('--card-color', '#10b981');";
+    html += "        } else if (co2Val < 15) {";
+    html += "          co2Card.style.setProperty('--card-color', '#f59e0b');";
+    html += "        } else {";
+    html += "          co2Card.style.setProperty('--card-color', '#ef4444');";
+    html += "        }";
+    html += "        const nh3Val = parseFloat(data.nh3_ppm);";
+    html += "        const nh3Alert = document.getElementById('nh3Alert');";
+    html += "        if (nh3Val > 0.05) {";
+    html += "          nh3Alert.style.display = 'inline-block';";
+    html += "        } else {";
+    html += "          nh3Alert.style.display = 'none';";
+    html += "        }";
+    html += "        const stockVal = parseFloat(data.stocking_density);";
+    html += "        const stockCard = document.getElementById('stockCard');";
+    html += "        if (stockVal < 1.0) {";
+    html += "          stockCard.style.setProperty('--card-color', '#10b981');";
+    html += "        } else if (stockVal <= 2.0) {";
+    html += "          stockCard.style.setProperty('--card-color', '#f59e0b');";
+    html += "        } else {";
+    html += "          stockCard.style.setProperty('--card-color', '#ef4444');";
+    html += "        }";
+    html += "      }";
+    html += "    })";
+    html += "    .catch(err => console.error('Derived metrics update failed:', err));";
     html += "}";
     html += "</script>";
     html += "</head>";
@@ -502,13 +633,74 @@ String AquariumWebServer::generateHomePage() {
 
     html += "</div>";
 
+    // Derived Metrics Section
+    html += "<div class='section-title'>Derived Water Quality Metrics</div>";
+    html += "<div class='sensor-grid'>";
+
+    // TDS
+    html += "<div class='sensor-card' style='--card-color: var(--tds-color)'>";
+    html += "<div class='sensor-label'>TDS (Total Dissolved Solids)</div>";
+    html += "<div class='sensor-value'><span id='tds'>";
+    html += dataValid ? String(tds_ppm, 1) : "--";
+    html += "</span></div>";
+    html += "<div class='sensor-unit'>ppm</div>";
+    html += "</div>";
+
+    // CO2 with color coding
+    html += "<div class='sensor-card' id='co2Card' style='--card-color: var(--co2-color)'>";
+    html += "<div class='sensor-label'>Dissolved CO2</div>";
+    html += "<div class='sensor-value'><span id='co2'>";
+    html += dataValid ? String(co2_ppm, 2) : "--";
+    html += "</span></div>";
+    html += "<div class='sensor-unit'>ppm</div>";
+    html += "<div class='sensor-status' style='font-size:0.7em;color:var(--text-tertiary)'>15-30 ppm optimal</div>";
+    html += "</div>";
+
+    // Toxic Ammonia Ratio
+    html += "<div class='sensor-card' style='--card-color: var(--nh3-color)'>";
+    html += "<div class='sensor-label'>Toxic NH3 Ratio</div>";
+    html += "<div class='sensor-value'><span id='nh3_ratio'>";
+    html += dataValid ? String(toxic_ammonia_ratio * 100.0, 2) : "--";
+    html += "</span></div>";
+    html += "<div class='sensor-unit'>%</div>";
+    String nh3AlertDisplay = (dataValid && nh3_ppm > 0.05) ? "" : "style='display:none'";
+    html += "<div id='nh3Alert' class='alert-badge alert-danger' " + nh3AlertDisplay + ">⚠ NH3 > 0.05 ppm</div>";
+    html += "<div style='font-size:0.7em;color:var(--text-tertiary);margin-top:5px'>NH3: <span id='nh3_ppm'>";
+    html += dataValid ? String(nh3_ppm, 4) : "--";
+    html += "</span> ppm</div>";
+    html += "</div>";
+
+    // Maximum Dissolved Oxygen
+    html += "<div class='sensor-card' style='--card-color: var(--do-color)'>";
+    html += "<div class='sensor-label'>Max O2 Saturation</div>";
+    html += "<div class='sensor-value'><span id='max_do'>";
+    html += dataValid ? String(max_do_mg_l, 2) : "--";
+    html += "</span></div>";
+    html += "<div class='sensor-unit'>mg/L</div>";
+    html += "<div class='sensor-status' style='font-size:0.7em;color:var(--text-tertiary)'>At current temp</div>";
+    html += "</div>";
+
+    // Stocking Density with color coding
+    html += "<div class='sensor-card' id='stockCard' style='--card-color: var(--stock-color)'>";
+    html += "<div class='sensor-label'>Stocking Density</div>";
+    html += "<div class='sensor-value'><span id='stock'>";
+    html += dataValid ? String(stocking_density, 2) : "--";
+    html += "</span></div>";
+    html += "<div class='sensor-unit'>cm/L</div>";
+    html += "<div class='sensor-status' style='font-size:0.7em;color:var(--text-tertiary)'>&lt;1 light, 1-2 moderate, &gt;2 heavy</div>";
+    html += "</div>";
+
+    html += "</div>";
+
     html += "<div class='info-footer'>Auto-refresh every 2 seconds | Real-time monitoring active<br>Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
 
     html += "<script>\n";
     html += "initTheme();\n";
     html += "setInterval(updateData, 2000);\n";
+    html += "setInterval(updateDerivedMetrics, 2000);\n";
     html += "setInterval(updateMqttStatus, 5000);\n";
     html += "updateData();\n";
+    html += "updateDerivedMetrics();\n";
     html += "updateMqttStatus();\n";
     html += "</script>";
     html += "</body>";
@@ -660,10 +852,18 @@ void AquariumWebServer::handleGetHistory(AsyncWebServerRequest *request) {
         if (history[idx].valid) {
             JsonObject point = dataArray.add<JsonObject>();
             point["t"] = (long long)history[idx].timestamp;
+            // Primary sensors
             point["temp"] = serialized(String(history[idx].temp_c, 2));
             point["orp"] = serialized(String(history[idx].orp_mv, 2));
             point["ph"] = serialized(String(history[idx].ph, 2));
             point["ec"] = serialized(String(history[idx].ec_ms_cm, 3));
+            // Derived metrics
+            point["tds"] = serialized(String(history[idx].tds_ppm, 1));
+            point["co2"] = serialized(String(history[idx].co2_ppm, 2));
+            point["nh3_ratio"] = serialized(String(history[idx].toxic_ammonia_ratio * 100.0, 2));
+            point["nh3_ppm"] = serialized(String(history[idx].nh3_ppm, 4));
+            point["max_do"] = serialized(String(history[idx].max_do_mg_l, 2));
+            point["stock"] = serialized(String(history[idx].stocking_density, 2));
         }
     }
 
@@ -1200,11 +1400,47 @@ String AquariumWebServer::generateCalibrationPage() {
         }
         .steps ol { margin: 10px 0; padding-left: 20px; }
         .steps li { margin: 5px 0; }
+        /* Tab Navigation Styles */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+            background: var(--bg-card);
+            padding: 10px;
+            border-radius: 10px 10px 0 0;
+        }
+        .tab-button {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .tab-button:hover {
+            color: var(--color-primary);
+            background: var(--bg-primary);
+            border-radius: 8px 8px 0 0;
+        }
+        .tab-button.active {
+            color: var(--color-primary);
+            border-bottom-color: var(--color-primary);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class='header'>
-        <h1>🔬 Sensor Calibration</h1>
+        <h1>🔬 Configuration & Calibration</h1>
         <div class='nav'>
             <a href='/'>Home</a>
             <button onclick='exportCSV()' title='Export data as CSV'>CSV</button>
@@ -1213,6 +1449,16 @@ String AquariumWebServer::generateCalibrationPage() {
     </div>
 
     <div id='messages'></div>
+
+    <!-- Tab Navigation -->
+    <div class='tabs'>
+        <button class='tab-button active' onclick='switchTab("calibration")'>🔬 Sensor Calibration</button>
+        <button class='tab-button' onclick='switchTab("tank")'>🐠 Tank Settings</button>
+        <button class='tab-button' onclick='switchTab("mqtt")'>📡 MQTT Configuration</button>
+    </div>
+
+    <!-- Calibration Tab Content -->
+    <div id='calibration-tab' class='tab-content active'>
 
     <!-- Unit Name Configuration Card -->
     <div class='card'>
@@ -1362,6 +1608,145 @@ String AquariumWebServer::generateCalibrationPage() {
         <button onclick='calibrateEc()'>Calibrate EC</button>
         <button class='danger' onclick='clearEcCal()'>Clear EC Calibration</button>
     </div>
+
+    </div> <!-- End Calibration Tab -->
+
+    <!-- Tank Settings Tab Content -->
+    <div id='tank-tab' class='tab-content'>
+
+    <!-- Tank Configuration Card -->
+    <div class='card'>
+        <h2>Tank Configuration</h2>
+        <div class='info'>
+            <strong>Configure your aquarium:</strong><br>
+            Set tank dimensions to calculate volume and track stocking density.
+        </div>
+
+        <div class='form-group'>
+            <label>Tank Shape:</label>
+            <select id='tank_shape' onchange='updateDimensionInputs()'>
+                <option value='0'>Rectangle</option>
+                <option value='1'>Cube</option>
+                <option value='2'>Cylinder</option>
+                <option value='3'>Custom (Manual Volume)</option>
+            </select>
+        </div>
+
+        <div id='rectangle_inputs'>
+            <div class='form-group'>
+                <label>Length (cm):</label>
+                <input type='number' step='0.1' id='tank_length' placeholder='e.g., 100' value='0'>
+            </div>
+            <div class='form-group'>
+                <label>Width (cm):</label>
+                <input type='number' step='0.1' id='tank_width' placeholder='e.g., 50' value='0'>
+            </div>
+            <div class='form-group'>
+                <label>Height (cm):</label>
+                <input type='number' step='0.1' id='tank_height' placeholder='e.g., 60' value='0'>
+            </div>
+        </div>
+
+        <div id='cylinder_inputs' style='display:none;'>
+            <div class='form-group'>
+                <label>Radius (cm):</label>
+                <input type='number' step='0.1' id='tank_radius' placeholder='e.g., 25' value='0'>
+            </div>
+            <div class='form-group'>
+                <label>Height (cm):</label>
+                <input type='number' step='0.1' id='tank_height_cyl' placeholder='e.g., 60' value='0'>
+            </div>
+        </div>
+
+        <div id='cube_inputs' style='display:none;'>
+            <div class='form-group'>
+                <label>Side Length (cm):</label>
+                <input type='number' step='0.1' id='tank_cube_side' placeholder='e.g., 50' value='0'>
+            </div>
+        </div>
+
+        <div id='custom_inputs' style='display:none;'>
+            <div class='form-group'>
+                <label>Manual Volume (Liters):</label>
+                <input type='number' step='0.1' id='tank_manual_volume' placeholder='e.g., 300' value='0'>
+            </div>
+        </div>
+
+        <button onclick='calculateVolume()'>Calculate Volume</button>
+        <div id='volume_display' style='margin-top: 15px; padding: 10px; background: var(--info-bg); color: var(--info-text); border-radius: 5px; display: none;'>
+            <strong>Calculated Volume:</strong> <span id='calculated_volume'>0</span> Liters
+        </div>
+
+        <button onclick='saveTankSettings()' style='margin-top: 15px;'>Save Tank Settings</button>
+    </div>
+
+    <!-- Water Parameters Card -->
+    <div class='card'>
+        <h2>Water Parameters</h2>
+        <div class='info'>
+            <strong>Set water chemistry parameters:</strong><br>
+            These values are used to calculate derived metrics like CO2 and toxic ammonia.
+        </div>
+
+        <div class='form-group'>
+            <label>Carbonate Hardness (KH) in dKH:</label>
+            <input type='number' step='0.1' id='tank_kh' placeholder='e.g., 4.0' value='4.0'>
+            <small>Used for CO2 calculation. Default: 4.0 dKH</small>
+        </div>
+
+        <div class='form-group'>
+            <label>Total Ammonia Nitrogen (TAN) in ppm:</label>
+            <input type='number' step='0.01' id='tank_tan' placeholder='e.g., 0.0' value='0.0'>
+            <small>Used for toxic NH3 calculation. Default: 0.0 ppm</small>
+        </div>
+
+        <div class='form-group'>
+            <label>TDS Conversion Factor:</label>
+            <input type='number' step='0.01' id='tank_tds_factor' placeholder='e.g., 0.64' value='0.64'>
+            <small>Typical: 0.5-0.7. Default: 0.64 for freshwater</small>
+        </div>
+
+        <button onclick='saveWaterParams()'>Save Water Parameters</button>
+    </div>
+
+    <!-- Fish Profile Card -->
+    <div class='card'>
+        <h2>Fish Profile (Stocking Calculator)</h2>
+        <div class='info'>
+            <strong>Track your fish population:</strong><br>
+            Add fish to calculate stocking density. Rule of thumb: 1 cm fish per 1-2 liters.
+        </div>
+
+        <h3>Add Fish</h3>
+        <div class='form-group'>
+            <label>Species Name:</label>
+            <input type='text' id='fish_species' placeholder='e.g., Neon Tetra' maxlength='31'>
+        </div>
+        <div class='form-group'>
+            <label>Count:</label>
+            <input type='number' id='fish_count' placeholder='e.g., 10' min='1' value='1'>
+        </div>
+        <div class='form-group'>
+            <label>Average Length (cm):</label>
+            <input type='number' step='0.1' id='fish_length' placeholder='e.g., 4.0'>
+        </div>
+        <button onclick='addFish()'>Add Fish</button>
+
+        <h3>Current Fish List</h3>
+        <div id='fish_list' style='margin-top: 10px;'>
+            <div style='color: var(--text-secondary);'>No fish added yet</div>
+        </div>
+        <div id='total_stocking' style='margin-top: 15px; padding: 10px; background: var(--info-bg); color: var(--info-text); border-radius: 5px; display: none;'>
+            <strong>Total Stocking Length:</strong> <span id='stocking_length'>0</span> cm
+        </div>
+
+        <button onclick='clearAllFish()' class='danger' style='margin-top: 15px;'>Clear All Fish</button>
+    </div>
+
+    </div> <!-- End Tank Settings Tab -->
+
+    <!-- MQTT Configuration Tab Content -->
+    <div id='mqtt-tab' class='tab-content'>
 
     <!-- MQTT Configuration Card -->
     <div class='card'>
@@ -1782,9 +2167,244 @@ String AquariumWebServer::generateCalibrationPage() {
         setInterval(refreshMqttStatus, 10000); // Update MQTT status every 10 seconds
     </script>
 
+    </div> <!-- End MQTT Tab -->
+
     <div style='text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.85em;'>
         Scott McLelslie to my beloved wife Kate 2026. Happy new year
     </div>
+
+    <script>
+        // Tab switching function
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            // Activate button
+            event.target.classList.add('active');
+
+            // Load tank settings when switching to tank tab
+            if (tabName === 'tank') {
+                loadTankSettings();
+                loadFishList();
+            }
+        }
+
+        // Update dimension inputs based on tank shape
+        function updateDimensionInputs() {
+            const shape = parseInt(document.getElementById('tank_shape').value);
+            document.getElementById('rectangle_inputs').style.display = (shape === 0) ? 'block' : 'none';
+            document.getElementById('cube_inputs').style.display = (shape === 1) ? 'block' : 'none';
+            document.getElementById('cylinder_inputs').style.display = (shape === 2) ? 'block' : 'none';
+            document.getElementById('custom_inputs').style.display = (shape === 3) ? 'block' : 'none';
+        }
+
+        // Calculate tank volume
+        function calculateVolume() {
+            const shape = parseInt(document.getElementById('tank_shape').value);
+            let volume = 0;
+
+            if (shape === 0) { // Rectangle
+                const length = parseFloat(document.getElementById('tank_length').value) || 0;
+                const width = parseFloat(document.getElementById('tank_width').value) || 0;
+                const height = parseFloat(document.getElementById('tank_height').value) || 0;
+                volume = (length * width * height) / 1000.0; // cm³ to liters
+            } else if (shape === 1) { // Cube
+                const side = parseFloat(document.getElementById('tank_cube_side').value) || 0;
+                volume = (side * side * side) / 1000.0;
+            } else if (shape === 2) { // Cylinder
+                const radius = parseFloat(document.getElementById('tank_radius').value) || 0;
+                const height = parseFloat(document.getElementById('tank_height_cyl').value) || 0;
+                volume = (Math.PI * radius * radius * height) / 1000.0;
+            } else if (shape === 3) { // Custom
+                volume = parseFloat(document.getElementById('tank_manual_volume').value) || 0;
+            }
+
+            document.getElementById('calculated_volume').textContent = volume.toFixed(2);
+            document.getElementById('volume_display').style.display = 'block';
+        }
+
+        // Save tank settings
+        function saveTankSettings() {
+            const shape = document.getElementById('tank_shape').value;
+            const length = parseFloat(document.getElementById('tank_length').value) || 0;
+            const width = parseFloat(document.getElementById('tank_width').value) || 0;
+            const height = parseFloat(document.getElementById('tank_height').value) || 0;
+            const radius = parseFloat(document.getElementById('tank_radius').value) || 0;
+            const manual_volume = parseFloat(document.getElementById('tank_manual_volume').value) || 0;
+
+            const params = new URLSearchParams();
+            params.append('tank_shape', shape);
+            params.append('length', length);
+            params.append('width', width);
+            params.append('height', height);
+            params.append('radius', radius);
+            params.append('manual_volume', manual_volume);
+
+            fetch('/api/settings/tank', { method: 'POST', body: params })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message + ' (Volume: ' + data.calculated_volume.toFixed(2) + ' L)', 'success');
+                    } else {
+                        showMessage(data.error || 'Failed to save tank settings', 'error');
+                    }
+                })
+                .catch(err => showMessage('Error saving tank settings', 'error'));
+        }
+
+        // Save water parameters
+        function saveWaterParams() {
+            const kh = parseFloat(document.getElementById('tank_kh').value) || 4.0;
+            const tan = parseFloat(document.getElementById('tank_tan').value) || 0.0;
+            const tds_factor = parseFloat(document.getElementById('tank_tds_factor').value) || 0.64;
+
+            const params = new URLSearchParams();
+            params.append('kh', kh);
+            params.append('tan', tan);
+            params.append('tds_factor', tds_factor);
+
+            fetch('/api/settings/tank', { method: 'POST', body: params })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                    } else {
+                        showMessage(data.error || 'Failed to save water parameters', 'error');
+                    }
+                })
+                .catch(err => showMessage('Error saving water parameters', 'error'));
+        }
+
+        // Load tank settings
+        function loadTankSettings() {
+            fetch('/api/settings/tank')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('tank_shape').value = data.tank_shape || 0;
+                    document.getElementById('tank_length').value = data.dimensions.length_cm || 0;
+                    document.getElementById('tank_width').value = data.dimensions.width_cm || 0;
+                    document.getElementById('tank_height').value = data.dimensions.height_cm || 0;
+                    document.getElementById('tank_radius').value = data.dimensions.radius_cm || 0;
+                    document.getElementById('tank_cube_side').value = data.dimensions.length_cm || 0;
+                    document.getElementById('tank_height_cyl').value = data.dimensions.height_cm || 0;
+                    document.getElementById('tank_manual_volume').value = data.manual_volume_liters || 0;
+                    document.getElementById('tank_kh').value = data.manual_kh_dkh || 4.0;
+                    document.getElementById('tank_tan').value = data.manual_tan_ppm || 0.0;
+                    document.getElementById('tank_tds_factor').value = data.tds_conversion_factor || 0.64;
+                    updateDimensionInputs();
+                    if (data.calculated_volume_liters > 0) {
+                        document.getElementById('calculated_volume').textContent = data.calculated_volume_liters.toFixed(2);
+                        document.getElementById('volume_display').style.display = 'block';
+                    }
+                })
+                .catch(err => console.error('Error loading tank settings:', err));
+        }
+
+        // Add fish
+        function addFish() {
+            const species = document.getElementById('fish_species').value.trim();
+            const count = parseInt(document.getElementById('fish_count').value) || 1;
+            const length = parseFloat(document.getElementById('fish_length').value) || 0;
+
+            if (!species || length <= 0) {
+                showMessage('Please enter species name and length', 'error');
+                return;
+            }
+
+            const params = new URLSearchParams();
+            params.append('species', species);
+            params.append('count', count);
+            params.append('avg_length', length);
+
+            fetch('/api/settings/fish/add', { method: 'POST', body: params })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                        document.getElementById('fish_species').value = '';
+                        document.getElementById('fish_length').value = '';
+                        loadFishList();
+                    } else {
+                        showMessage(data.error || 'Failed to add fish', 'error');
+                    }
+                })
+                .catch(err => showMessage('Error adding fish', 'error'));
+        }
+
+        // Load fish list
+        function loadFishList() {
+            fetch('/api/settings/fish')
+                .then(r => r.json())
+                .then(data => {
+                    const listDiv = document.getElementById('fish_list');
+                    if (data.fish && data.fish.length > 0) {
+                        let html = '<table style=\"width:100%; border-collapse: collapse;\">';
+                        html += '<tr style=\"border-bottom: 1px solid var(--border-color); font-weight: bold;\">';
+                        html += '<td>Species</td><td>Count</td><td>Avg Length</td><td>Action</td></tr>';
+                        data.fish.forEach((fish, idx) => {
+                            html += '<tr style=\"border-bottom: 1px solid var(--border-color); padding: 5px 0;\">';
+                            html += '<td>' + fish.species + '</td>';
+                            html += '<td>' + fish.count + '</td>';
+                            html += '<td>' + fish.avg_length_cm.toFixed(1) + ' cm</td>';
+                            html += '<td><button class=\"danger\" onclick=\"removeFish(' + idx + ')\" style=\"padding: 4px 8px; font-size: 0.85em;\">Remove</button></td>';
+                            html += '</tr>';
+                        });
+                        html += '</table>';
+                        listDiv.innerHTML = html;
+
+                        document.getElementById('stocking_length').textContent = data.total_stocking_length.toFixed(1);
+                        document.getElementById('total_stocking').style.display = 'block';
+                    } else {
+                        listDiv.innerHTML = '<div style=\"color: var(--text-secondary);\">No fish added yet</div>';
+                        document.getElementById('total_stocking').style.display = 'none';
+                    }
+                })
+                .catch(err => console.error('Error loading fish list:', err));
+        }
+
+        // Remove fish
+        function removeFish(index) {
+            const params = new URLSearchParams();
+            params.append('index', index);
+
+            fetch('/api/settings/fish/remove', { method: 'POST', body: params })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                        loadFishList();
+                    } else {
+                        showMessage(data.error || 'Failed to remove fish', 'error');
+                    }
+                })
+                .catch(err => showMessage('Error removing fish', 'error'));
+        }
+
+        // Clear all fish
+        function clearAllFish() {
+            if (!confirm('Are you sure you want to clear all fish?')) return;
+
+            fetch('/api/settings/fish/clear', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                        loadFishList();
+                    } else {
+                        showMessage(data.error || 'Failed to clear fish', 'error');
+                    }
+                })
+                .catch(err => showMessage('Error clearing fish', 'error'));
+        }
+    </script>
 </body>
 </html>
 )rawliteral";
@@ -1831,7 +2451,7 @@ void AquariumWebServer::handleExportCSV(AsyncWebServerRequest *request) {
     csv += "#\r\n";
 
     // CSV Header
-    csv += "Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,Valid\r\n";
+    csv += "Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,TDS_ppm,CO2_ppm,NH3_Ratio_%,NH3_ppm,Max_DO_mg_L,Stocking_cm_L,Valid\r\n";
 
     // Output data in chronological order
     int startIdx = historyCount < HISTORY_SIZE ? 0 : historyHead;
@@ -1870,6 +2490,20 @@ void AquariumWebServer::handleExportCSV(AsyncWebServerRequest *request) {
 
             // EC
             csv += String(history[idx].ec_ms_cm, 3);
+            csv += ",";
+
+            // Derived metrics
+            csv += String(history[idx].tds_ppm, 1);
+            csv += ",";
+            csv += String(history[idx].co2_ppm, 2);
+            csv += ",";
+            csv += String(history[idx].toxic_ammonia_ratio * 100.0, 2);
+            csv += ",";
+            csv += String(history[idx].nh3_ppm, 4);
+            csv += ",";
+            csv += String(history[idx].max_do_mg_l, 2);
+            csv += ",";
+            csv += String(history[idx].stocking_density, 2);
             csv += ",";
 
             // Valid flag
@@ -1917,10 +2551,18 @@ void AquariumWebServer::handleExportJSON(AsyncWebServerRequest *request) {
             validCount++;
             JsonObject point = dataArray.add<JsonObject>();
             point["timestamp"] = (long long)history[idx].timestamp;
+            // Primary sensors
             point["temp_c"] = serialized(String(history[idx].temp_c, 2));
             point["orp_mv"] = serialized(String(history[idx].orp_mv, 2));
             point["ph"] = serialized(String(history[idx].ph, 2));
             point["ec_ms_cm"] = serialized(String(history[idx].ec_ms_cm, 3));
+            // Derived metrics
+            point["tds_ppm"] = serialized(String(history[idx].tds_ppm, 1));
+            point["co2_ppm"] = serialized(String(history[idx].co2_ppm, 2));
+            point["nh3_ratio_pct"] = serialized(String(history[idx].toxic_ammonia_ratio * 100.0, 2));
+            point["nh3_ppm"] = serialized(String(history[idx].nh3_ppm, 4));
+            point["max_do_mg_l"] = serialized(String(history[idx].max_do_mg_l, 2));
+            point["stocking_density"] = serialized(String(history[idx].stocking_density, 2));
             point["valid"] = true;
         }
     }
@@ -1935,4 +2577,210 @@ void AquariumWebServer::handleExportJSON(AsyncWebServerRequest *request) {
     asyncResponse->addHeader("Content-Disposition", "attachment; filename=aquarium-data.json");
     asyncResponse->addHeader("Cache-Control", "no-cache");
     request->send(asyncResponse);
+}
+
+// Derived metrics API handler
+void AquariumWebServer::handleGetDerivedMetrics(AsyncWebServerRequest *request) {
+    JsonDocument doc;
+
+    doc["tds_ppm"] = serialized(String(tds_ppm, 2));
+    doc["co2_ppm"] = serialized(String(co2_ppm, 2));
+    doc["toxic_ammonia_ratio"] = serialized(String(toxic_ammonia_ratio * 100.0, 2));  // As percentage
+    doc["nh3_ppm"] = serialized(String(nh3_ppm, 4));
+    doc["max_do_mg_l"] = serialized(String(max_do_mg_l, 2));
+    doc["stocking_density"] = serialized(String(stocking_density, 2));
+    doc["valid"] = dataValid;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+// Tank settings API handlers
+void AquariumWebServer::handleGetTankSettings(AsyncWebServerRequest *request) {
+    if (tankSettingsManager == nullptr) {
+        request->send(500, "application/json", "{\"error\":\"Tank settings manager not initialized\"}");
+        return;
+    }
+
+    JsonDocument doc;
+    TankSettings& settings = tankSettingsManager->getSettings();
+
+    doc["tank_shape"] = (int)settings.tank_shape;
+    doc["dimensions"]["length_cm"] = settings.dimensions.length_cm;
+    doc["dimensions"]["width_cm"] = settings.dimensions.width_cm;
+    doc["dimensions"]["height_cm"] = settings.dimensions.height_cm;
+    doc["dimensions"]["radius_cm"] = settings.dimensions.radius_cm;
+    doc["calculated_volume_liters"] = settings.calculated_volume_liters;
+    doc["manual_volume_liters"] = settings.manual_volume_liters;
+    doc["manual_kh_dkh"] = settings.manual_kh_dkh;
+    doc["manual_tan_ppm"] = settings.manual_tan_ppm;
+    doc["tds_conversion_factor"] = settings.tds_conversion_factor;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void AquariumWebServer::handleSaveTankSettings(AsyncWebServerRequest *request) {
+    if (tankSettingsManager == nullptr) {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Tank settings manager not initialized\"}");
+        return;
+    }
+
+    // Parse form parameters
+    if (request->hasParam("tank_shape", true)) {
+        int shape = request->getParam("tank_shape", true)->value().toInt();
+        tankSettingsManager->setTankShape((TankShape)shape);
+    }
+
+    if (request->hasParam("length", true)) {
+        float length = request->getParam("length", true)->value().toFloat();
+        float width = request->getParam("width", true)->value().toFloat();
+        float height = request->getParam("height", true)->value().toFloat();
+        float radius = request->getParam("radius", true)->value().toFloat();
+        tankSettingsManager->setDimensions(length, width, height, radius);
+    }
+
+    if (request->hasParam("manual_volume", true)) {
+        float volume = request->getParam("manual_volume", true)->value().toFloat();
+        tankSettingsManager->setManualVolume(volume);
+    }
+
+    if (request->hasParam("kh", true)) {
+        float kh = request->getParam("kh", true)->value().toFloat();
+        tankSettingsManager->setKH(kh);
+    }
+
+    if (request->hasParam("tan", true)) {
+        float tan = request->getParam("tan", true)->value().toFloat();
+        tankSettingsManager->setTAN(tan);
+    }
+
+    if (request->hasParam("tds_factor", true)) {
+        float factor = request->getParam("tds_factor", true)->value().toFloat();
+        tankSettingsManager->setTDSFactor(factor);
+    }
+
+    // Calculate volume
+    float volume = tankSettingsManager->calculateVolume();
+
+    // Save to NVS
+    tankSettingsManager->saveSettings();
+
+    JsonDocument doc;
+    doc["success"] = true;
+    doc["message"] = "Tank settings saved successfully";
+    doc["calculated_volume"] = volume;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+// Fish profile API handlers
+void AquariumWebServer::handleGetFishList(AsyncWebServerRequest *request) {
+    if (tankSettingsManager == nullptr) {
+        request->send(500, "application/json", "{\"error\":\"Tank settings manager not initialized\"}");
+        return;
+    }
+
+    JsonDocument doc;
+    JsonArray fishArray = doc["fish"].to<JsonArray>();
+
+    FishProfile* fishList = tankSettingsManager->getFishList();
+    uint8_t fishCount = tankSettingsManager->getFishCount();
+
+    for (int i = 0; i < fishCount; i++) {
+        JsonObject fish = fishArray.add<JsonObject>();
+        fish["species"] = fishList[i].species;
+        fish["count"] = fishList[i].count;
+        fish["avg_length_cm"] = fishList[i].avg_length_cm;
+    }
+
+    doc["total_stocking_length"] = tankSettingsManager->getTotalStockingLength();
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void AquariumWebServer::handleAddFish(AsyncWebServerRequest *request) {
+    if (tankSettingsManager == nullptr) {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Tank settings manager not initialized\"}");
+        return;
+    }
+
+    if (!request->hasParam("species", true) || !request->hasParam("count", true) || !request->hasParam("avg_length", true)) {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Missing required parameters\"}");
+        return;
+    }
+
+    String species = request->getParam("species", true)->value();
+    int count = request->getParam("count", true)->value().toInt();
+    float avg_length = request->getParam("avg_length", true)->value().toFloat();
+
+    bool success = tankSettingsManager->addFish(species.c_str(), count, avg_length);
+
+    if (success) {
+        tankSettingsManager->saveSettings();
+
+        JsonDocument doc;
+        doc["success"] = true;
+        doc["message"] = "Fish added successfully";
+        doc["total_stocking_length"] = tankSettingsManager->getTotalStockingLength();
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    } else {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Failed to add fish (maximum 10 species)\"}");
+    }
+}
+
+void AquariumWebServer::handleRemoveFish(AsyncWebServerRequest *request) {
+    if (tankSettingsManager == nullptr) {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Tank settings manager not initialized\"}");
+        return;
+    }
+
+    if (!request->hasParam("index", true)) {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Missing index parameter\"}");
+        return;
+    }
+
+    int index = request->getParam("index", true)->value().toInt();
+    bool success = tankSettingsManager->removeFish(index);
+
+    if (success) {
+        tankSettingsManager->saveSettings();
+
+        JsonDocument doc;
+        doc["success"] = true;
+        doc["message"] = "Fish removed successfully";
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    } else {
+        request->send(400, "application/json", "{\"success\":false,\"error\":\"Invalid fish index\"}");
+    }
+}
+
+void AquariumWebServer::handleClearFish(AsyncWebServerRequest *request) {
+    if (tankSettingsManager == nullptr) {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Tank settings manager not initialized\"}");
+        return;
+    }
+
+    tankSettingsManager->clearFish();
+    tankSettingsManager->saveSettings();
+
+    JsonDocument doc;
+    doc["success"] = true;
+    doc["message"] = "All fish cleared successfully";
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
 }

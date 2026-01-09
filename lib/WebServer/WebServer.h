@@ -11,6 +11,7 @@ struct POETResult;
 class WiFiManager;
 class CalibrationManager;
 class MQTTManager;
+class TankSettingsManager;
 
 // Data history configuration
 #define HISTORY_SIZE 288  // 288 points = 24 hours at 5-minute intervals (or 24 min at 5s intervals)
@@ -22,6 +23,13 @@ struct DataPoint {
     float orp_mv;
     float ph;
     float ec_ms_cm;
+    // Derived metrics
+    float tds_ppm;
+    float co2_ppm;
+    float toxic_ammonia_ratio;
+    float nh3_ppm;
+    float max_do_mg_l;
+    float stocking_density;
     bool valid;
 };
 
@@ -49,11 +57,15 @@ public:
     int getHistoryCount() const { return historyCount; }
     int getHistoryHead() const { return historyHead; }
 
+    // Set tank settings manager
+    void setTankSettingsManager(TankSettingsManager* mgr);
+
 private:
     AsyncWebServer server;
     WiFiManager* wifiManager;
     CalibrationManager* calibrationManager;
     MQTTManager* mqttManager;
+    TankSettingsManager* tankSettingsManager;
 
     // Latest sensor readings (raw)
     int32_t raw_temp_mC;
@@ -69,6 +81,14 @@ private:
     float ec_ms_cm;
     unsigned long lastUpdate;
     bool dataValid;
+
+    // Derived metrics (calculated on each sensor update)
+    float tds_ppm;
+    float co2_ppm;
+    float toxic_ammonia_ratio;
+    float nh3_ppm;
+    float max_do_mg_l;
+    float stocking_density;
 
     // Data history (circular buffer)
     DataPoint history[HISTORY_SIZE];
@@ -109,6 +129,13 @@ private:
     void handleGetMQTTStatus(AsyncWebServerRequest *request);
     void handleGetUnitName(AsyncWebServerRequest *request);
     void handleSaveUnitName(AsyncWebServerRequest *request);
+    void handleGetDerivedMetrics(AsyncWebServerRequest *request);
+    void handleGetTankSettings(AsyncWebServerRequest *request);
+    void handleSaveTankSettings(AsyncWebServerRequest *request);
+    void handleGetFishList(AsyncWebServerRequest *request);
+    void handleAddFish(AsyncWebServerRequest *request);
+    void handleRemoveFish(AsyncWebServerRequest *request);
+    void handleClearFish(AsyncWebServerRequest *request);
 
     // HTML page generators
     String generateHomePage();

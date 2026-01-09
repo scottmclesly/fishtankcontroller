@@ -5,6 +5,8 @@
 #include "WebServer.h"
 #include "CalibrationManager.h"
 #include "MQTTManager.h"
+#include "TankSettingsManager.h"
+#include "DerivedMetrics.h"
 
 // POET Sensor I2C Configuration
 #define POET_I2C_ADDR 0x1F
@@ -39,6 +41,7 @@ struct POETResult {
 WiFiManager wifiManager;
 CalibrationManager calibrationManager;
 MQTTManager mqttManager;
+TankSettingsManager tankSettingsManager;
 AquariumWebServer* webServer = nullptr;
 
 // Timing for non-blocking sensor reads
@@ -91,8 +94,14 @@ void setup() {
   }
   Serial.println();
 
+  // Initialize Tank Settings Manager
+  tankSettingsManager.begin();
+  Serial.println("Tank Settings Manager initialized");
+  Serial.println();
+
   // Initialize Web Server
   webServer = new AquariumWebServer(&wifiManager, &calibrationManager, &mqttManager);
+  webServer->setTankSettingsManager(&tankSettingsManager);
   webServer->begin();
 
   if (wifiConnected) {
@@ -193,16 +202,37 @@ void loop() {
         Serial.println(" mS/cm (calibrated)");
       }
 
+      // Calculate derived metrics
+      TankSettings& settings = tankSettingsManager.getSettings();
+      float tds_ppm = DerivedMetrics::calculateTDS(ec_mS_cm, settings.tds_conversion_factor);
+      float co2_ppm = DerivedMetrics::calculateCO2(pH, settings.manual_kh_dkh);
+      float toxic_ammonia_ratio = DerivedMetrics::calculateToxicAmmoniaRatio(temp_C, pH);
+      float nh3_ppm = DerivedMetrics::calculateActualNH3(settings.manual_tan_ppm, toxic_ammonia_ratio);
+      float max_do_mg_l = DerivedMetrics::calculateMaxDO(temp_C);
+
+      float total_fish_length = tankSettingsManager.getTotalStockingLength();
+      float tank_volume = settings.calculated_volume_liters;
+      if (tank_volume <= 0.0 && settings.manual_volume_liters > 0.0) {
+        tank_volume = settings.manual_volume_liters;
+      }
+      float stocking_density = DerivedMetrics::calculateStockingDensity(total_fish_length, tank_volume);
+
       // Publish to MQTT if connected
       SensorData sensorData;
       sensorData.temp_c = temp_C;
       sensorData.orp_mv = orp_mV;
       sensorData.ph = pH;
       sensorData.ec_ms_cm = ec_mS_cm;
+      sensorData.tds_ppm = tds_ppm;
+      sensorData.co2_ppm = co2_ppm;
+      sensorData.nh3_ratio = toxic_ammonia_ratio;
+      sensorData.nh3_ppm = nh3_ppm;
+      sensorData.max_do_mg_l = max_do_mg_l;
+      sensorData.stocking_density = stocking_density;
       sensorData.valid = result.valid;
 
       if (mqttManager.publishSensorData(sensorData)) {
-        Serial.println("\nMQTT: Sensor data published");
+        Serial.println("\nMQTT: Sensor data published (including derived metrics)");
       } else if (mqttManager.isConnected()) {
         Serial.println("\nMQTT: Failed to publish (will retry)");
       }

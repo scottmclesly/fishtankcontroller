@@ -27,6 +27,12 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             --orp-color: #f59e0b;
             --ph-color: #10b981;
             --ec-color: #3b82f6;
+            --tds-color: #3b82f6;
+            --co2-color: #10b981;
+            --nh3-color: #f59e0b;
+            --nh3ppm-color: #ef4444;
+            --do-color: #06b6d4;
+            --stocking-color: #8b5cf6;
             --grid-color: rgba(100, 116, 139, 0.1);
         }
         [data-theme='light'] {
@@ -211,6 +217,40 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             animation: pulse 2s ease-in-out infinite;
         }
         .status-dot.warning { background: #f59e0b; }
+        .view-toggles {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .toggle-btn {
+            padding: 10px 20px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        .toggle-btn.active {
+            background: var(--color-primary);
+            color: var(--bg-primary);
+            border-color: var(--color-primary);
+            box-shadow: 0 0 15px var(--glow);
+        }
+        .toggle-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+        .chart-section {
+            transition: all 0.3s ease;
+        }
+        .chart-section.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -265,53 +305,153 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             <div class='stat-unit'>mS/cm</div>
             <div class='stat-time' id='ecTime'>--</div>
         </div>
-    </div>
-
-    <div class='chart-container'>
-        <div class='chart-header'>
-            <div class='chart-title'>
-                <div class='chart-icon' style='--chart-color: var(--temp-color)'></div>
-                Temperature Monitor
-            </div>
+        <div class='stat-card' style='--stat-color: var(--tds-color)'>
+            <div class='stat-label'>TDS</div>
+            <div class='stat-value'><span id='currentTds'>--</span></div>
+            <div class='stat-unit'>ppm</div>
+            <div class='stat-time' id='tdsTime'>--</div>
         </div>
-        <div class='chart-wrapper'>
-            <canvas id='tempChart'></canvas>
+        <div class='stat-card' style='--stat-color: var(--co2-color)'>
+            <div class='stat-label'>Dissolved CO₂</div>
+            <div class='stat-value'><span id='currentCo2'>--</span></div>
+            <div class='stat-unit'>ppm</div>
+            <div class='stat-time' id='co2Time'>--</div>
         </div>
-    </div>
-
-    <div class='chart-container'>
-        <div class='chart-header'>
-            <div class='chart-title'>
-                <div class='chart-icon' style='--chart-color: var(--orp-color)'></div>
-                ORP (Oxidation-Reduction Potential)
-            </div>
+        <div class='stat-card' style='--stat-color: var(--nh3-color)'>
+            <div class='stat-label'>NH₃ Ratio</div>
+            <div class='stat-value'><span id='currentNh3Ratio'>--</span></div>
+            <div class='stat-unit'>%</div>
+            <div class='stat-time' id='nh3RatioTime'>--</div>
         </div>
-        <div class='chart-wrapper'>
-            <canvas id='orpChart'></canvas>
+        <div class='stat-card' style='--stat-color: var(--do-color)'>
+            <div class='stat-label'>Max DO</div>
+            <div class='stat-value'><span id='currentMaxDo'>--</span></div>
+            <div class='stat-unit'>mg/L</div>
+            <div class='stat-time' id='maxDoTime'>--</div>
         </div>
-    </div>
-
-    <div class='chart-container'>
-        <div class='chart-header'>
-            <div class='chart-title'>
-                <div class='chart-icon' style='--chart-color: var(--ph-color)'></div>
-                pH Levels
-            </div>
-        </div>
-        <div class='chart-wrapper'>
-            <canvas id='phChart'></canvas>
+        <div class='stat-card' style='--stat-color: var(--stocking-color)'>
+            <div class='stat-label'>Stocking Density</div>
+            <div class='stat-value'><span id='currentStocking'>--</span></div>
+            <div class='stat-unit'>cm/L</div>
+            <div class='stat-time' id='stockingTime'>--</div>
         </div>
     </div>
 
-    <div class='chart-container'>
-        <div class='chart-header'>
-            <div class='chart-title'>
-                <div class='chart-icon' style='--chart-color: var(--ec-color)'></div>
-                Electrical Conductivity
+    <div class='view-toggles'>
+        <button class='toggle-btn active' onclick='switchView("all")' id='btnAll'>📊 All Metrics</button>
+        <button class='toggle-btn' onclick='switchView("primary")' id='btnPrimary'>🔬 Primary Sensors</button>
+        <button class='toggle-btn' onclick='switchView("derived")' id='btnDerived'>📈 Derived Metrics</button>
+    </div>
+
+    <div class='chart-section primary-charts'>
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--temp-color)'></div>
+                    Temperature Monitor
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='tempChart'></canvas>
             </div>
         </div>
-        <div class='chart-wrapper'>
-            <canvas id='ecChart'></canvas>
+
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--orp-color)'></div>
+                    ORP (Oxidation-Reduction Potential)
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='orpChart'></canvas>
+            </div>
+        </div>
+
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--ph-color)'></div>
+                    pH Levels
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='phChart'></canvas>
+            </div>
+        </div>
+
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--ec-color)'></div>
+                    Electrical Conductivity
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='ecChart'></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class='chart-section derived-charts'>
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--tds-color)'></div>
+                    Total Dissolved Solids (TDS)
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='tdsChart'></canvas>
+            </div>
+        </div>
+
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--co2-color)'></div>
+                    Dissolved CO₂
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='co2Chart'></canvas>
+            </div>
+        </div>
+
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--nh3-color)'></div>
+                    Toxic Ammonia Ratio
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='nh3RatioChart'></canvas>
+            </div>
+        </div>
+
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--do-color)'></div>
+                    Maximum Dissolved Oxygen
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='maxDoChart'></canvas>
+            </div>
+        </div>
+
+        <div class='chart-container'>
+            <div class='chart-header'>
+                <div class='chart-title'>
+                    <div class='chart-icon' style='--chart-color: var(--stocking-color)'></div>
+                    Stocking Density
+                </div>
+            </div>
+            <div class='chart-wrapper'>
+                <canvas id='stockingChart'></canvas>
+            </div>
         </div>
     </div>
 
@@ -448,10 +588,18 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         }
 
         function initCharts() {
+            // Primary sensors
             charts.temp = createChart('tempChart', 'Temperature', '#ef4444', '°C', 20, 30);
             charts.orp = createChart('orpChart', 'ORP', '#f59e0b', 'mV', 200, 400);
             charts.ph = createChart('phChart', 'pH', '#10b981', 'pH', 6, 9);
             charts.ec = createChart('ecChart', 'EC', '#3b82f6', 'mS/cm', 0, 5);
+
+            // Derived metrics
+            charts.tds = createChart('tdsChart', 'TDS', '#3b82f6', 'ppm', 0, 500);
+            charts.co2 = createChart('co2Chart', 'CO₂', '#10b981', 'ppm', 0, 40);
+            charts.nh3Ratio = createChart('nh3RatioChart', 'NH₃ Ratio', '#f59e0b', '%', 0, 10);
+            charts.maxDo = createChart('maxDoChart', 'Max DO', '#06b6d4', 'mg/L', 6, 12);
+            charts.stocking = createChart('stockingChart', 'Stocking', '#8b5cf6', 'cm/L', 0, 3);
         }
 
         function updateCharts(data) {
@@ -459,6 +607,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 
             const timestamps = data.map(d => new Date(d.t * 1000));
 
+            // Primary sensors
             charts.temp.data.labels = timestamps;
             charts.temp.data.datasets[0].data = data.map(d => parseFloat(d.temp));
             charts.temp.update('none');
@@ -474,6 +623,29 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             charts.ec.data.labels = timestamps;
             charts.ec.data.datasets[0].data = data.map(d => parseFloat(d.ec));
             charts.ec.update('none');
+
+            // Derived metrics
+            if (data[0].tds !== undefined) {
+                charts.tds.data.labels = timestamps;
+                charts.tds.data.datasets[0].data = data.map(d => parseFloat(d.tds || 0));
+                charts.tds.update('none');
+
+                charts.co2.data.labels = timestamps;
+                charts.co2.data.datasets[0].data = data.map(d => parseFloat(d.co2 || 0));
+                charts.co2.update('none');
+
+                charts.nh3Ratio.data.labels = timestamps;
+                charts.nh3Ratio.data.datasets[0].data = data.map(d => parseFloat(d.nh3_ratio * 100 || 0));
+                charts.nh3Ratio.update('none');
+
+                charts.maxDo.data.labels = timestamps;
+                charts.maxDo.data.datasets[0].data = data.map(d => parseFloat(d.max_do || 0));
+                charts.maxDo.update('none');
+
+                charts.stocking.data.labels = timestamps;
+                charts.stocking.data.datasets[0].data = data.map(d => parseFloat(d.stocking || 0));
+                charts.stocking.update('none');
+            }
         }
 
         async function fetchHistory() {
@@ -510,6 +682,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                 const data = await response.json();
 
                 if (data.valid) {
+                    // Primary sensors
                     document.getElementById('currentTemp').textContent = data.temperature_c.toFixed(2);
                     document.getElementById('currentOrp').textContent = data.orp_mv.toFixed(2);
                     document.getElementById('currentPh').textContent = data.ph.toFixed(2);
@@ -520,11 +693,52 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                     document.getElementById('orpTime').textContent = now;
                     document.getElementById('phTime').textContent = now;
                     document.getElementById('ecTime').textContent = now;
+
+                    // Fetch derived metrics
+                    fetch('/api/metrics/derived').then(r => r.json()).then(derived => {
+                        if (derived) {
+                            document.getElementById('currentTds').textContent = derived.tds_ppm.toFixed(1);
+                            document.getElementById('currentCo2').textContent = derived.co2_ppm.toFixed(2);
+                            document.getElementById('currentNh3Ratio').textContent = (derived.toxic_ammonia_ratio * 100).toFixed(2);
+                            document.getElementById('currentMaxDo').textContent = derived.max_do_mg_l.toFixed(2);
+                            document.getElementById('currentStocking').textContent = derived.stocking_density.toFixed(2);
+
+                            document.getElementById('tdsTime').textContent = now;
+                            document.getElementById('co2Time').textContent = now;
+                            document.getElementById('nh3RatioTime').textContent = now;
+                            document.getElementById('maxDoTime').textContent = now;
+                            document.getElementById('stockingTime').textContent = now;
+                        }
+                    }).catch(err => console.log('Derived metrics not available:', err));
                 }
             } catch (error) {
                 console.error('Error fetching current data:', error);
             } finally {
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            }
+        }
+
+        function switchView(view) {
+            // Update button states
+            document.getElementById('btnAll').classList.remove('active');
+            document.getElementById('btnPrimary').classList.remove('active');
+            document.getElementById('btnDerived').classList.remove('active');
+
+            const primaryCharts = document.querySelector('.primary-charts');
+            const derivedCharts = document.querySelector('.derived-charts');
+
+            if (view === 'all') {
+                document.getElementById('btnAll').classList.add('active');
+                primaryCharts.classList.remove('hidden');
+                derivedCharts.classList.remove('hidden');
+            } else if (view === 'primary') {
+                document.getElementById('btnPrimary').classList.add('active');
+                primaryCharts.classList.remove('hidden');
+                derivedCharts.classList.add('hidden');
+            } else if (view === 'derived') {
+                document.getElementById('btnDerived').classList.add('active');
+                primaryCharts.classList.add('hidden');
+                derivedCharts.classList.remove('hidden');
             }
         }
 

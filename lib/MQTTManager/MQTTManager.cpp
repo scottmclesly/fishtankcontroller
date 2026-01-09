@@ -271,6 +271,7 @@ bool MQTTManager::publishSensorData(const SensorData& data) {
     if (data.valid) {
         char payload[32];
 
+        // Primary sensors
         // Temperature
         snprintf(payload, sizeof(payload), "%.2f", data.temp_c);
         success &= mqttClient->publish(getTelemetryTopic("temperature").c_str(), payload, true);
@@ -286,14 +287,47 @@ bool MQTTManager::publishSensorData(const SensorData& data) {
         // EC
         snprintf(payload, sizeof(payload), "%.3f", data.ec_ms_cm);
         success &= mqttClient->publish(getTelemetryTopic("ec").c_str(), payload, true);
+
+        // Derived metrics
+        // TDS
+        snprintf(payload, sizeof(payload), "%.1f", data.tds_ppm);
+        success &= mqttClient->publish(getTelemetryTopic("tds").c_str(), payload, true);
+
+        // CO2
+        snprintf(payload, sizeof(payload), "%.2f", data.co2_ppm);
+        success &= mqttClient->publish(getTelemetryTopic("co2").c_str(), payload, true);
+
+        // NH3 Ratio (as percentage)
+        snprintf(payload, sizeof(payload), "%.2f", data.nh3_ratio * 100.0);
+        success &= mqttClient->publish(getTelemetryTopic("nh3_ratio").c_str(), payload, true);
+
+        // NH3 PPM
+        snprintf(payload, sizeof(payload), "%.3f", data.nh3_ppm);
+        success &= mqttClient->publish(getTelemetryTopic("nh3_ppm").c_str(), payload, true);
+
+        // Max DO
+        snprintf(payload, sizeof(payload), "%.2f", data.max_do_mg_l);
+        success &= mqttClient->publish(getTelemetryTopic("max_do").c_str(), payload, true);
+
+        // Stocking Density
+        snprintf(payload, sizeof(payload), "%.2f", data.stocking_density);
+        success &= mqttClient->publish(getTelemetryTopic("stocking").c_str(), payload, true);
     }
 
     // Also publish combined JSON payload
     JsonDocument doc;
+    // Primary sensors
     doc["temperature_c"] = data.temp_c;
     doc["orp_mv"] = data.orp_mv;
     doc["ph"] = data.ph;
     doc["ec_ms_cm"] = data.ec_ms_cm;
+    // Derived metrics
+    doc["tds_ppm"] = data.tds_ppm;
+    doc["co2_ppm"] = data.co2_ppm;
+    doc["nh3_ratio"] = data.nh3_ratio;
+    doc["nh3_ppm"] = data.nh3_ppm;
+    doc["max_do_mg_l"] = data.max_do_mg_l;
+    doc["stocking_density"] = data.stocking_density;
     doc["valid"] = data.valid;
     doc["timestamp"] = now;
 
@@ -343,10 +377,19 @@ bool MQTTManager::publishDiscovery() {
     };
 
     bool success = true;
+    // Primary sensors
     success &= publishSensor("temperature", "temperature", "°C", "mdi:thermometer");
     success &= publishSensor("orp", "voltage", "mV", "mdi:flash");
     success &= publishSensor("ph", "", "pH", "mdi:ph");
     success &= publishSensor("ec", "voltage", "mS/cm", "mdi:water-percent");
+
+    // Derived metrics
+    success &= publishSensor("tds", "", "ppm", "mdi:water-opacity");
+    success &= publishSensor("co2", "", "ppm", "mdi:molecule-co2");
+    success &= publishSensor("nh3_ratio", "", "%", "mdi:alert-circle");
+    success &= publishSensor("nh3_ppm", "", "ppm", "mdi:biohazard");
+    success &= publishSensor("max_do", "", "mg/L", "mdi:air-filter");
+    success &= publishSensor("stocking", "", "cm/L", "mdi:fish");
 
     if (success) {
         Serial.println("[MQTT] Discovery messages published successfully");

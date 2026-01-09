@@ -188,23 +188,44 @@ The device now includes a fully functional web interface with:
 
 **Live Sensor Dashboard:**
 - Real-time display of Temperature (°C), ORP (mV), pH, and EC (mS/cm)
+- **Derived water quality metrics:**
+  - Total Dissolved Solids (TDS) in ppm
+  - Dissolved CO₂ concentration in ppm with color-coded status
+  - Toxic ammonia (NH₃) ratio as percentage
+  - Maximum dissolved oxygen saturation in mg/L
+  - Stocking density in cm of fish per liter with color-coded warnings
 - Auto-refresh every 2 seconds via background polling
 - Responsive design works on desktop, tablet, and mobile
 - Visual warnings for uncalibrated sensors
 - WiFi connection status and signal strength
 - **MQTT connection status indicator** showing real-time broker connectivity
 
-**Sensor Calibration Interface:**
-- pH calibration (1-point or 2-point with buffer solutions)
-- EC calibration (cell constant determination with known solutions)
+**Sensor Calibration & Settings Interface:**
+- **Tab-based navigation** with three sections:
+  - **Sensor Calibration:** pH calibration (1-point or 2-point with buffer solutions), EC calibration (cell constant determination)
+  - **Tank Settings:** Aquarium configuration for derived metrics calculations
+  - **MQTT Configuration:** Broker setup and connection management
+- **Tank Settings configuration:**
+  - Tank shape selection (rectangle, cube, cylinder, custom)
+  - Dimension inputs with automatic volume calculation
+  - Manual volume override for custom shapes
+  - Water chemistry parameters (KH, TAN, TDS conversion factor)
+  - Fish profile management (up to 10 species with count and average length)
+  - Total stocking calculation display
 - Real-time raw sensor readings display
 - Calibration status tracking with NVS persistence
-- **MQTT configuration panel** with broker setup and connection testing
+- All settings persist across reboots in NVS
 
 **Historical Data & Charts:**
 - 288-point circular buffer (24 minutes at 5-second intervals)
+- **Includes all primary sensors and derived metrics** in historical tracking
 - Real-time chart visualization with Chart.js
-- Data export in CSV and JSON formats
+- **View toggle buttons** to switch between:
+  - All Metrics (primary sensors + derived metrics)
+  - Primary Sensors only (temperature, ORP, pH, EC)
+  - Derived Metrics only (TDS, CO₂, NH₃ ratio, max DO, stocking density)
+- Individual charts for each metric with appropriate scaling and units
+- Data export in CSV and JSON formats (includes derived metrics)
 - **MQTT status monitoring** on charts page
 
 **WiFi Provisioning:**
@@ -217,17 +238,25 @@ The device now includes a fully functional web interface with:
 **API Endpoints:**
 - `GET /` - Main dashboard (sensor view or provisioning based on mode)
 - `GET /api/sensors` - JSON sensor data for programmatic access
-- `GET /api/history` - Historical sensor data (288-point buffer)
-- `GET /api/export/csv` - Export data in CSV format
-- `GET /api/export/json` - Export data in JSON format
-- `GET /calibration` - Sensor calibration interface
-- `GET /charts` - Historical data visualization
+- `GET /api/history` - Historical sensor data (288-point buffer, includes derived metrics)
+- `GET /api/export/csv` - Export data in CSV format (includes derived metrics)
+- `GET /api/export/json` - Export data in JSON format (includes derived metrics)
+- `GET /calibration` - Sensor calibration interface with tank settings and MQTT config tabs
+- `GET /charts` - Historical data visualization with derived metrics
 - `GET /setup` - Provisioning configuration page
 - `POST /save-wifi` - Save WiFi credentials
 - `GET /scan` - Scan for available networks
 - `GET /api/mqtt/config` - Get MQTT configuration
 - `POST /api/mqtt/config` - Save MQTT configuration
 - `GET /api/mqtt/status` - Get MQTT connection status
+- **Derived Metrics & Tank Settings:**
+  - `GET /api/metrics/derived` - Get all derived water quality metrics
+  - `GET /api/settings/tank` - Get tank configuration settings
+  - `POST /api/settings/tank` - Save tank configuration
+  - `GET /api/settings/fish` - Get fish profile list
+  - `POST /api/settings/fish/add` - Add fish to profile
+  - `POST /api/settings/fish/remove` - Remove fish by index
+  - `POST /api/settings/fish/clear` - Clear all fish profiles
 
 ### Access Methods
 - **mDNS:** `http://aquarium.local` (when connected to WiFi)
@@ -291,23 +320,45 @@ MQTT is the preferred "gateway" into **Home Assistant** and other automation sta
 **Base topic**: `aquarium/<device_id>/...`
 
 **Published Topics:**
-- `aquarium/<device_id>/telemetry/temperature` - Temperature in °C (individual topic)
-- `aquarium/<device_id>/telemetry/orp` - ORP in mV (individual topic)
-- `aquarium/<device_id>/telemetry/ph` - pH value (individual topic)
-- `aquarium/<device_id>/telemetry/ec` - EC in mS/cm (individual topic)
-- `aquarium/<device_id>/telemetry/sensors` - Combined JSON payload (all sensors)
+
+*Primary Sensors:*
+- `aquarium/<device_id>/telemetry/temperature` - Temperature in °C
+- `aquarium/<device_id>/telemetry/orp` - ORP in mV
+- `aquarium/<device_id>/telemetry/ph` - pH value
+- `aquarium/<device_id>/telemetry/ec` - EC in mS/cm
+
+*Derived Metrics:*
+- `aquarium/<device_id>/telemetry/tds` - Total Dissolved Solids in ppm
+- `aquarium/<device_id>/telemetry/co2` - Dissolved CO₂ in ppm
+- `aquarium/<device_id>/telemetry/nh3_ratio` - Toxic ammonia ratio as percentage
+- `aquarium/<device_id>/telemetry/nh3_ppm` - Toxic ammonia (NH₃) in ppm
+- `aquarium/<device_id>/telemetry/max_do` - Maximum dissolved oxygen in mg/L
+- `aquarium/<device_id>/telemetry/stocking` - Stocking density in cm/L
+
+*Combined Payload:*
+- `aquarium/<device_id>/telemetry/sensors` - Combined JSON payload (all sensors + derived metrics)
 
 **Home Assistant Discovery Topics** (when enabled):
+
+*Primary Sensors:*
 - `homeassistant/sensor/<device_id>/temperature/config`
 - `homeassistant/sensor/<device_id>/orp/config`
 - `homeassistant/sensor/<device_id>/ph/config`
 - `homeassistant/sensor/<device_id>/ec/config`
 
+*Derived Metrics:*
+- `homeassistant/sensor/<device_id>/tds/config`
+- `homeassistant/sensor/<device_id>/co2/config`
+- `homeassistant/sensor/<device_id>/nh3_ratio/config`
+- `homeassistant/sensor/<device_id>/nh3_ppm/config`
+- `homeassistant/sensor/<device_id>/max_do/config`
+- `homeassistant/sensor/<device_id>/stocking/config`
+
 ### MQTT Configuration
 
 **Via Web Interface:**
 1. Navigate to `http://aquarium.local/calibration`
-2. Scroll to **MQTT Configuration** section
+2. Click the **MQTT Configuration** tab
 3. Configure settings:
    - **Enable MQTT Publishing** - Toggle to enable/disable
    - **Broker Host/IP** - Your MQTT broker address (e.g., `192.168.1.100`, `homeassistant.local`)
@@ -332,12 +383,50 @@ Combined sensor telemetry payload (`aquarium/<device_id>/telemetry/sensors`):
   "orp_mv": 350.2,
   "ph": 7.8,
   "ec_ms_cm": 1.234,
+  "tds_ppm": 791.2,
+  "co2_ppm": 18.5,
+  "nh3_ratio": 0.015,
+  "nh3_ppm": 0.0045,
+  "max_do_mg_l": 8.24,
+  "stocking_density": 1.25,
   "valid": true,
   "timestamp": 123456789
 }
 ```
 
 Individual sensor topics publish simple float values for easy integration.
+
+### Derived Metrics Calculations
+
+The system calculates several derived water quality metrics from sensor readings and tank configuration:
+
+**Total Dissolved Solids (TDS):**
+- Formula: `TDS (ppm) = EC (μS/cm) × conversion factor`
+- Default conversion factor: 0.64 (configurable for freshwater/saltwater)
+- Indicates overall dissolved mineral content
+
+**Dissolved CO₂:**
+- Formula: `CO₂ (ppm) = 3.0 × KH × 10^(7.0 - pH)`
+- Based on carbonate equilibrium equation
+- Color coding: Green (15-30 ppm optimal), Yellow (<15 ppm), Red (>30 ppm)
+- Requires KH (carbonate hardness) configuration
+
+**Toxic Ammonia (NH₃):**
+- Temperature and pH dependent calculation using dissociation equilibrium
+- Formula: `pKa = 0.09018 + (2729.92 / T_kelvin)`
+- Returns both ratio (fraction as NH₃) and actual ppm
+- Critical for fish health monitoring
+
+**Maximum Dissolved Oxygen (DO):**
+- Temperature-dependent polynomial approximation
+- Formula: `DO = 14.652 - 0.41022×T + 0.007991×T² - 0.000077774×T³`
+- Helps assess aeration adequacy
+
+**Stocking Density:**
+- Calculated from fish profiles and tank volume
+- Formula: `Density = total fish length (cm) / tank volume (L)`
+- Color coding: Green (<1), Yellow (1-2), Red (>2)
+- Rule of thumb: 1 cm per 1-2 liters for small tropical fish
 
 ---
 
@@ -435,11 +524,14 @@ On first boot, the device will start in provisioning mode:
 - ✅ Connection testing and status monitoring
 - Stored in NVS (persistent across reboots)
 
-**Calibration (via Web UI - Calibration Page):**
+**Calibration & Tank Settings (via Web UI - Calibration Page):**
 - ✅ pH calibration (1-point offset or 2-point offset+slope)
 - ✅ EC calibration (cell constant with known solution)
 - ✅ Calibration status tracking
-- ✅ Stored in NVS (persistent across reboots)
+- ✅ **Tank configuration** (shape, dimensions, volume calculation)
+- ✅ **Water chemistry parameters** (KH, TAN, TDS conversion factor)
+- ✅ **Fish profile management** (species, count, average length)
+- ✅ All settings stored in NVS (persistent across reboots)
 
 ### Planned Configuration Options
 - Sampling rate: User-configurable interval (currently hardcoded at 5 seconds)
@@ -569,12 +661,25 @@ This is the easiest method if you're already using the web interface!
 > NOTE: Calibration is required for meaningful pH and EC values.
 
 ### Accessing the Calibration Interface
-Navigate to `http://aquarium.local/calibration` to access:
-- **Real-time sensor readings** for calibration reference
-- **pH calibration tools** (1-point and 2-point)
-- **EC calibration tools** (cell constant determination)
-- **MQTT configuration** (broker setup and connection management)
-- **Calibration status indicators**
+Navigate to `http://aquarium.local/calibration` to access a tab-based interface with three sections:
+
+**Sensor Calibration Tab:**
+- Real-time sensor readings for calibration reference
+- pH calibration tools (1-point and 2-point)
+- EC calibration tools (cell constant determination)
+- Calibration status indicators
+
+**Tank Settings Tab:**
+- Tank shape selection and dimension configuration
+- Automatic volume calculation
+- Water chemistry parameters (KH, TAN, TDS factor)
+- Fish profile management for stocking density calculations
+
+**MQTT Configuration Tab:**
+- Broker connection setup
+- Publishing interval configuration
+- Home Assistant Discovery toggle
+- Connection testing and status monitoring
 
 ### pH Calibration
 **1-Point Calibration (Offset Only):**
@@ -619,6 +724,49 @@ Calibration data is stored in NVS and persists across reboots.
 
 The system calculates and stores the cell constant with automatic temperature compensation. Calibration data persists in NVS.
 
+### Tank Settings Configuration
+
+The Tank Settings tab allows you to configure your aquarium parameters for accurate derived metrics calculations.
+
+**Tank Configuration:**
+1. Navigate to `http://aquarium.local/calibration`
+2. Click the **Tank Settings** tab
+3. Select tank shape:
+   - **Rectangle**: Enter length, width, and height
+   - **Cube**: Enter side length
+   - **Cylinder**: Enter radius and height
+   - **Custom**: Enter manual volume directly
+4. Click **Calculate Volume** to compute tank volume automatically
+5. Optionally override with **Manual Volume** for irregular shapes
+
+**Water Chemistry Parameters:**
+- **KH (Carbonate Hardness)**: Enter in dKH (default: 4.0)
+  - Required for CO₂ calculations
+  - Typical range: 3-8 dKH for freshwater, 7-12 dKH for marine
+- **TAN (Total Ammonia Nitrogen)**: Enter in ppm (default: 0.0)
+  - Used for toxic ammonia (NH₃) calculations
+  - Measure with standard aquarium test kit
+- **TDS Conversion Factor**: Default 0.64 for freshwater
+  - Range: 0.5-0.7 depending on water type
+  - 0.5 for pure solutions, 0.64 for typical freshwater, 0.7 for saltwater
+
+**Fish Profile Management:**
+1. Add fish to calculate stocking density
+2. For each species, enter:
+   - Species name (e.g., "Neon Tetra", "Angelfish")
+   - Count (number of fish)
+   - Average length in cm (adult size)
+3. Click **Add Fish** to save
+4. View total stocking length and density
+5. Remove fish or clear all as needed
+
+**Stocking Density Guidelines:**
+- **< 1 cm/L**: Lightly stocked (ideal)
+- **1-2 cm/L**: Moderately stocked (acceptable with good filtration)
+- **> 2 cm/L**: Heavily stocked (requires excellent filtration and frequent water changes)
+
+All settings are automatically saved to NVS and persist across reboots.
+
 ---
 
 ## Safety + electrical notes
@@ -650,6 +798,22 @@ The system calculates and stores the cell constant with automatic temperature co
 - [x] Console command interface for debugging and data export
 - [x] Dark/light theme toggle across all pages
 - [x] Responsive mobile-friendly design
+- [x] **Derived water quality metrics system:**
+  - [x] **Total Dissolved Solids (TDS) calculation from EC**
+  - [x] **Dissolved CO₂ calculation from pH and KH**
+  - [x] **Toxic ammonia (NH₃) ratio and ppm calculation**
+  - [x] **Maximum dissolved oxygen calculation**
+  - [x] **Stocking density calculation from fish profiles**
+- [x] **Tank configuration management:**
+  - [x] **Tank shape selection (rectangle, cube, cylinder, custom)**
+  - [x] **Automatic volume calculation from dimensions**
+  - [x] **Water chemistry parameters (KH, TAN, TDS factor)**
+  - [x] **Fish profile management (up to 10 species)**
+- [x] **Tab-based navigation on calibration page**
+- [x] **Derived metrics in historical data and charts**
+- [x] **Charts page view toggle (Primary/Derived/All metrics)**
+- [x] **MQTT publishing of all derived metrics with HA Discovery**
+- [x] **Color-coded metric status indicators**
 
 ### 🚧 In Progress / Planned
 - [ ] WebSocket live feed (currently using HTTP polling - works but could be more efficient)
