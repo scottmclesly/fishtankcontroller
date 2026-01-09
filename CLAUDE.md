@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ESP32-based wireless aquarium controller for freshwater/saltwater tanks. Built around the **Sentron POET pH/ORP/EC/Temperature I2C sensor** with planned support for additional sensors and relay/driver outputs for tank equipment.
 
-**Status:** Work in progress - currently in early development stage with basic project structure.
+**Status:** Working prototype - WiFi connectivity, sensor monitoring, web UI, and MQTT operational.
 
 ## Build System & Commands
 
@@ -202,12 +202,30 @@ Navigate to `http://aquarium.local/calibration` → MQTT Configuration section
 - TLS/SSL for secure MQTT
 - OTA firmware updates
 
-## Key Files
+## Documentation Structure
 
-### Documentation
-- [README.md](README.md) - Comprehensive project documentation with full feature details
+The project documentation has been reorganized for better readability:
+
+### Main Documentation
+- [README.md](README.md) - Condensed overview with quick start and key features
 - [CLAUDE.md](CLAUDE.md) - This file - development context for AI assistants
-- [docs/Sonetron ConeFET I2C protocol.pdf](docs/Sonetron%20ConeFET%20I2C%20protocol.pdf) - POET sensor I2C protocol specification
+
+### Detailed Guides (docs/ folder)
+- [docs/INSTALLATION.md](docs/INSTALLATION.md) - Flash firmware, WiFi provisioning, first boot
+- [docs/HARDWARE.md](docs/HARDWARE.md) - Hardware setup, wiring, POET sensor details
+- [docs/WEB_UI.md](docs/WEB_UI.md) - Web interface features, pages, API endpoints
+- [docs/CALIBRATION.md](docs/CALIBRATION.md) - pH and EC sensor calibration procedures
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Tank settings, fish profiles, system configuration
+- [docs/MQTT.md](docs/MQTT.md) - MQTT setup, topics, Home Assistant integration
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Build system, architecture, roadmap, contributing
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [docs/Sonetron ConeFET I2C protocol.pdf](docs/Sonetron%20ConeFET%20I2C%20protocol.pdf) - POET sensor protocol specification
+
+### When Working on Documentation
+- Main README should remain concise - detailed info goes in specific docs
+- Keep specialized guides focused on their topics
+- Update relevant docs/ files when adding features
+- Cross-reference between docs using markdown links
 
 ### Build Configuration
 - [platformio.ini](platformio.ini) - PlatformIO build config (ESP32-C3, libraries)
