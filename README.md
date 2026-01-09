@@ -5,7 +5,7 @@
 [![Status](https://img.shields.io/badge/status-working%20prototype-green)]()
 [![Platform](https://img.shields.io/badge/platform-ESP32-blue)]()
 [![Framework](https://img.shields.io/badge/framework-Arduino-00979D)]()
-[![License](https://img.shields.io/badge/license-MIT-orange)]()
+[![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-orange)](LICENSE)
 
 Wireless aquarium controller (freshwater/saltwater) built around the **Sentron POET pH/ORP/EC/Temperature I2C sensor** with web interface, MQTT integration, and Home Assistant support.
 
@@ -17,12 +17,14 @@ Wireless aquarium controller (freshwater/saltwater) built around the **Sentron P
 ## ✨ Key Features
 
 ### 🔬 Comprehensive Water Quality Monitoring
+
 - **Primary Sensors:** Temperature, pH, ORP (Oxidation-Reduction Potential), EC (Electrical Conductivity)
 - **Derived Metrics:** TDS, Dissolved CO₂, Toxic Ammonia (NH₃), Max Dissolved Oxygen, Stocking Density
 - **Real-time Updates:** Auto-refreshing dashboard with 5-second intervals
 - **Historical Data:** 24 minutes of history with Chart.js visualization
 
 ### 🌐 Web Interface
+
 - **Responsive Design:** Works on desktop, tablet, and mobile
 - **Live Dashboard:** Real-time sensor readings with status indicators
 - **Interactive Charts:** Historical data visualization with view toggles
@@ -31,6 +33,7 @@ Wireless aquarium controller (freshwater/saltwater) built around the **Sentron P
 - **Data Export:** CSV and JSON export for analysis
 
 ### 🏠 Home Automation Integration
+
 - **MQTT Publishing:** Individual sensor topics + combined JSON payload
 - **Home Assistant Discovery:** Automatic entity creation
 - **Real-time Status:** Connection monitoring on all pages
@@ -38,12 +41,14 @@ Wireless aquarium controller (freshwater/saltwater) built around the **Sentron P
 - **Derived Metrics:** All calculated metrics published to MQTT
 
 ### 🛠️ Easy Setup
+
 - **WiFi Provisioning:** Captive portal for easy WiFi setup
 - **mDNS Support:** Access via `http://aquarium.local`
 - **Persistent Storage:** Configuration survives reboots
 - **No Cloud Required:** Works completely offline
 
 ### 🎯 Advanced Features
+
 - **Sensor Calibration:** pH (1-point/2-point) and EC (cell constant) calibration
 - **Tank Configuration:** Shape, volume, water chemistry parameters
 - **Fish Stocking Tracker:** Manage fish profiles with automatic density calculation
@@ -55,12 +60,14 @@ Wireless aquarium controller (freshwater/saltwater) built around the **Sentron P
 ## 🚀 Quick Start
 
 ### 1. Hardware Requirements
+
 - **ESP32 board** (ESP32-C3, ESP32-S3, or compatible)
 - **Sentron POET sensor** (pH/ORP/EC/Temperature I2C)
 - **USB cable** for programming
 - **WiFi network** (2.4GHz)
 
 ### 2. Flash Firmware
+
 ```bash
 # Clone repository
 git clone https://github.com/yourusername/fishtankcontroller.git
@@ -74,12 +81,15 @@ pio device monitor
 ```
 
 ### 3. Connect to WiFi
+
 On first boot, device creates AP:
+
 - **SSID:** `AquariumSetup`
 - **Password:** `aquarium123`
 - Navigate to `http://192.168.4.1` and configure WiFi
 
 ### 4. Access Web Interface
+
 - **mDNS:** `http://aquarium.local`
 - **Direct IP:** Check serial monitor for assigned IP
 
@@ -88,16 +98,19 @@ On first boot, device creates AP:
 ## 📚 Documentation
 
 ### Getting Started
+
 - **[Installation Guide](docs/INSTALLATION.md)** - Flash firmware, WiFi provisioning, first boot
 - **[Hardware Setup](docs/HARDWARE.md)** - Wiring, POET sensor, power requirements
 
 ### Configuration and Usage
+
 - **[Web UI Guide](docs/WEB_UI.md)** - Dashboard, charts, API endpoints
 - **[Calibration Guide](docs/CALIBRATION.md)** - pH and EC sensor calibration procedures
 - **[Configuration Guide](docs/CONFIGURATION.md)** - Tank settings, fish profiles, water chemistry
 - **[MQTT Integration](docs/MQTT.md)** - Home Assistant setup, broker configuration, topics
 
 ### Reference
+
 - **[Development Guide](docs/DEVELOPMENT.md)** - Build system, architecture, roadmap, contributing
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 
@@ -108,18 +121,21 @@ On first boot, device creates AP:
 ### ✅ Working Features
 
 **Core Infrastructure:**
+
 - ✅ ESP32-C3/S3 support with Arduino framework
 - ✅ WiFi connection with AP provisioning
 - ✅ POET I2C sensor driver (full protocol)
 - ✅ mDNS responder
 
 **Monitoring:**
+
 - ✅ Real-time sensor readings (temp, ORP, pH, EC)
 - ✅ Derived metrics (TDS, CO₂, NH₃, DO, stocking)
 - ✅ 288-point historical data buffer (24 minutes)
 - ✅ CSV/JSON export via web UI and console
 
 **User Interface:**
+
 - ✅ Live dashboard with auto-refresh
 - ✅ Historical charts with Chart.js
 - ✅ Calibration interface (pH, EC)
@@ -128,6 +144,7 @@ On first boot, device creates AP:
 - ✅ Responsive mobile design
 
 **Integration:**
+
 - ✅ MQTT client with auto-reconnection
 - ✅ Home Assistant MQTT Discovery
 - ✅ Configurable broker via web UI
@@ -152,6 +169,7 @@ See [Development Guide](docs/DEVELOPMENT.md) for full roadmap.
 ## 🔬 Sensor Capabilities
 
 ### Primary Measurements
+
 | Sensor | Range | Accuracy | Notes |
 |--------|-------|----------|-------|
 | **Temperature** | 0-100°C | ±0.5°C | No calibration required |
@@ -160,6 +178,7 @@ See [Development Guide](docs/DEVELOPMENT.md) for full roadmap.
 | **EC** | 0-200 mS/cm | ±2% | Requires cell constant calibration |
 
 ### Derived Metrics
+
 - **TDS (Total Dissolved Solids):** Calculated from EC with configurable conversion factor
 - **Dissolved CO₂:** Based on pH and KH (carbonate hardness)
 - **Toxic Ammonia (NH₃):** Temperature and pH dependent calculation
@@ -173,12 +192,14 @@ See [Development Guide](docs/DEVELOPMENT.md) for full roadmap.
 **Automatic entity creation with MQTT Discovery:**
 
 ### Primary Sensors
+
 - `sensor.aquarium_temperature` - Temperature (°C)
 - `sensor.aquarium_ph` - pH value
 - `sensor.aquarium_orp` - ORP (mV)
 - `sensor.aquarium_ec` - Electrical Conductivity (mS/cm)
 
 ### Derived Metrics
+
 - `sensor.aquarium_tds` - Total Dissolved Solids (ppm)
 - `sensor.aquarium_co2` - Dissolved CO₂ (ppm)
 - `sensor.aquarium_nh3_ratio` - Toxic Ammonia Ratio (%)
@@ -212,6 +233,7 @@ See [Hardware Guide](docs/HARDWARE.md) for detailed safety information.
 Contributions welcome! Please read the [Development Guide](docs/DEVELOPMENT.md) first.
 
 **Before submitting PR:**
+
 - Test on actual hardware
 - Follow existing code style
 - Update documentation
@@ -221,9 +243,22 @@ Contributions welcome! Please read the [Development Guide](docs/DEVELOPMENT.md) 
 
 ## 📄 License
 
-This project is released under the **MIT License**.
+This project is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)**.
 
-Free to use, modify, and distribute for commercial and non-commercial purposes with attribution.
+**You are free to:**
+
+- Share and redistribute the material
+- Adapt, remix, and build upon the material
+
+**Under these terms:**
+
+- **Attribution** - Give appropriate credit and indicate changes
+- **NonCommercial** - No commercial use without written permission
+- **ShareAlike** - Derivatives must use the same license
+
+**Commercial Use:** Requires explicit written permission from the copyright holder. Contact the project maintainer for commercial licensing inquiries.
+
+See [LICENSE](LICENSE) file for full terms.
 
 ---
 

@@ -388,6 +388,14 @@ This controller may manage equipment supporting living organisms:
 
 ## License
 
-**MIT License** - See [LICENSE](../LICENSE) for details
+**Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)**
 
-Free to use, modify, and distribute for commercial and non-commercial purposes with attribution.
+See [LICENSE](../LICENSE) for full terms.
+
+**Key Points:**
+- ✅ Free for personal, educational, and non-commercial use
+- ✅ Modifications and derivatives allowed (must share under same license)
+- ✅ Attribution required
+- ❌ Commercial use requires written permission
+
+**Commercial Licensing:** Contact the project maintainer for commercial use inquiries.
