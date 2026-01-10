@@ -31,6 +31,13 @@ struct SensorData {
     float max_do_mg_l;
     float stocking_density;
     bool valid;
+    // Warning states (0=unknown, 1=normal, 2=warning, 3=critical)
+    uint8_t temp_state;
+    uint8_t ph_state;
+    uint8_t nh3_state;
+    uint8_t orp_state;
+    uint8_t ec_state;
+    uint8_t do_state;
 };
 
 class MQTTManager {
@@ -73,7 +80,9 @@ private:
     String lastError;
     bool initialized;
 
-    static const unsigned long RECONNECT_INTERVAL = 5000;  // 5 seconds
+    static const unsigned long RECONNECT_INTERVAL = 5000;  // Initial reconnect interval: 5 seconds
+    static const unsigned long MAX_RECONNECT_INTERVAL = 60000;  // Maximum backoff: 60 seconds
+    unsigned long currentReconnectInterval;  // Dynamic interval with exponential backoff
 
     // Topic helpers
     String getBaseTopic() const;

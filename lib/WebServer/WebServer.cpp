@@ -3,6 +3,7 @@
 #include "CalibrationManager.h"
 #include "MQTTManager.h"
 #include "TankSettingsManager.h"
+#include "WarningManager.h"
 #include "DerivedMetrics.h"
 #include "charts_page.h"
 #include <WiFi.h>
@@ -19,7 +20,8 @@ struct POETResult {
 };
 
 AquariumWebServer::AquariumWebServer(WiFiManager* wifiMgr, CalibrationManager* calMgr, MQTTManager* mqttMgr)
-    : server(80), wifiManager(wifiMgr), calibrationManager(calMgr), mqttManager(mqttMgr), tankSettingsManager(nullptr),
+    : server(80), wifiManager(wifiMgr), calibrationManager(calMgr), mqttManager(mqttMgr),
+      tankSettingsManager(nullptr), warningManager(nullptr),
       raw_temp_mC(0), raw_orp_uV(0), raw_ugs_uV(0), raw_ec_nA(0), raw_ec_uV(0),
       temp_c(0), orp_mv(0), ph(0), ec_ms_cm(0), lastUpdate(0), dataValid(false),
       tds_ppm(0), co2_ppm(0), toxic_ammonia_ratio(0), nh3_ppm(0), max_do_mg_l(0), stocking_density(0),
@@ -32,6 +34,10 @@ AquariumWebServer::AquariumWebServer(WiFiManager* wifiMgr, CalibrationManager* c
 
 void AquariumWebServer::setTankSettingsManager(TankSettingsManager* mgr) {
     tankSettingsManager = mgr;
+}
+
+void AquariumWebServer::setWarningManager(WarningManager* mgr) {
+    warningManager = mgr;
 }
 
 void AquariumWebServer::begin() {
@@ -95,6 +101,24 @@ void AquariumWebServer::addDataPointToHistory() {
     dp.max_do_mg_l = max_do_mg_l;
     dp.stocking_density = stocking_density;
     dp.valid = dataValid;
+
+    // Add warning states
+    if (warningManager != nullptr) {
+        SensorWarningState states = warningManager->getSensorState();
+        dp.temp_state = (uint8_t)states.temperature.state;
+        dp.ph_state = (uint8_t)states.ph.state;
+        dp.nh3_state = (uint8_t)states.nh3.state;
+        dp.orp_state = (uint8_t)states.orp.state;
+        dp.ec_state = (uint8_t)states.conductivity.state;
+        dp.do_state = (uint8_t)states.dissolved_oxygen.state;
+    } else {
+        dp.temp_state = 0; // STATE_UNKNOWN
+        dp.ph_state = 0;
+        dp.nh3_state = 0;
+        dp.orp_state = 0;
+        dp.ec_state = 0;
+        dp.do_state = 0;
+    }
 
     history[historyHead] = dp;
     historyHead = (historyHead + 1) % HISTORY_SIZE;
@@ -233,6 +257,19 @@ void AquariumWebServer::setupRoutes() {
 
     server.on("/api/settings/fish/clear", HTTP_POST, [this](AsyncWebServerRequest *request) {
         this->handleClearFish(request);
+    });
+
+    // Warning profile API endpoints
+    server.on("/api/warnings/profile", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetWarningProfile(request);
+    });
+
+    server.on("/api/warnings/profile", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        this->handleSaveWarningProfile(request);
+    });
+
+    server.on("/api/warnings/states", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleGetWarningStates(request);
     });
 
     // 404 handler
@@ -380,6 +417,17 @@ void AquariumWebServer::updateSensorData(const POETResult& result) {
         stocking_density = 0.0;
     }
 
+    // Evaluate warning states (if warning manager is available)
+    if (warningManager != nullptr) {
+        warningManager->evaluateTemperature(temp_c);
+        warningManager->evaluatePH(ph);
+        warningManager->evaluateNH3(nh3_ppm);
+        warningManager->evaluateORP(orp_mv);
+        // Convert EC to µS/cm for evaluation
+        warningManager->evaluateConductivity(ec_ms_cm * 1000.0);
+        warningManager->evaluateDO(max_do_mg_l);
+    }
+
     lastUpdate = millis();
     dataValid = true;
 }
@@ -467,6 +515,19 @@ String AquariumWebServer::generateHomePage() {
     html += ".warning-banner { background: var(--warning-bg); color: var(--warning-text); padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid var(--border-color); }";
     html += ".warning-banner a { color: var(--warning-text); text-decoration: underline; font-weight: bold; }";
     html += ".info-footer { text-align: center; padding: 15px; background: var(--bg-card); border-radius: 10px; margin-top: 20px; border: 1px solid var(--border-color); font-size: 0.85em; color: var(--text-secondary); }";
+    // Warning system CSS
+    html += ".warning-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; font-size: 0.85em; font-weight: 600; margin-left: 10px; }";
+    html += ".warning-badge.critical { background: var(--danger-bg); color: var(--danger-text); }";
+    html += ".warning-badge.warning { background: var(--warning-bg); color: var(--warning-text); }";
+    html += ".warning-badge.normal { background: var(--success-bg); color: var(--success-text); }";
+    html += ".sensor-card.state-normal { border-color: var(--border-color); }";
+    html += ".sensor-card.state-warning { border-color: #f59e0b; box-shadow: 0 0 15px rgba(245, 158, 11, 0.3); animation: warning-pulse 2s ease-in-out infinite; }";
+    html += ".sensor-card.state-critical { border-color: #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); animation: critical-pulse 1.5s ease-in-out infinite; }";
+    html += "@keyframes warning-pulse { 0%, 100% { box-shadow: 0 0 15px rgba(245, 158, 11, 0.3); } 50% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.6); } }";
+    html += "@keyframes critical-pulse { 0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); } 50% { box-shadow: 0 0 35px rgba(239, 68, 68, 0.8); } }";
+    html += ".sensor-card.state-warning .sensor-label::after { content: ' ⚠'; color: #f59e0b; }";
+    html += ".sensor-card.state-critical .sensor-label::after { content: ' 🔴'; }";
+    html += ".sensor-card[title] { cursor: help; }";
     html += "</style>";
     html += "<script>";
     html += "function initTheme() {";
@@ -557,6 +618,54 @@ String AquariumWebServer::generateHomePage() {
     html += "      }";
     html += "    })";
     html += "    .catch(err => console.error('Derived metrics update failed:', err));";
+    html += "}\n";
+    html += "function updateWarningStates() {";
+    html += "  fetch('/api/warnings/states')";
+    html += "    .then(response => response.json())";
+    html += "    .then(data => {";
+    html += "      const warningCount = data.warning_count || 0;";
+    html += "      const criticalCount = data.critical_count || 0;";
+    html += "      let badgeEl = document.getElementById('warningBadge');";
+    html += "      if (!badgeEl) {";
+    html += "        badgeEl = document.createElement('span');";
+    html += "        badgeEl.id = 'warningBadge';";
+    html += "        document.querySelector('h1').appendChild(badgeEl);";
+    html += "      }";
+    html += "      if (criticalCount > 0) {";
+    html += "        badgeEl.className = 'warning-badge critical';";
+    html += "        badgeEl.textContent = '🚨 ' + criticalCount + ' Critical';";
+    html += "        badgeEl.style.display = 'inline-flex';";
+    html += "      } else if (warningCount > 0) {";
+    html += "        badgeEl.className = 'warning-badge warning';";
+    html += "        badgeEl.textContent = '⚠ ' + warningCount + ' Warning' + (warningCount > 1 ? 's' : '');";
+    html += "        badgeEl.style.display = 'inline-flex';";
+    html += "      } else {";
+    html += "        badgeEl.style.display = 'none';";
+    html += "      }";
+    html += "      updateCardState('tempCard', data.temperature, 'Temperature');";
+    html += "      updateCardState('phCard', data.ph, 'pH');";
+    html += "      updateCardState('nh3Card', data.nh3, 'NH3');";
+    html += "      updateCardState('orpCard', data.orp, 'ORP');";
+    html += "      updateCardState('ecCard', data.conductivity, 'EC');";
+    html += "      updateCardState('doCard', data.dissolved_oxygen, 'DO');";
+    html += "    })";
+    html += "    .catch(err => console.error('Warning states update failed:', err));";
+    html += "}\n";
+    html += "function updateCardState(cardId, stateData, metricName) {";
+    html += "  const card = document.getElementById(cardId);";
+    html += "  if (!card || !stateData) return;";
+    html += "  card.className = 'sensor-card';";
+    html += "  card.removeAttribute('title');";
+    html += "  const stateCode = stateData.state_code || 0;";
+    html += "  if (stateCode === 3) {";
+    html += "    card.className = 'sensor-card state-critical';";
+    html += "    card.title = metricName + ': CRITICAL - ' + stateData.state;";
+    html += "  } else if (stateCode === 2) {";
+    html += "    card.className = 'sensor-card state-warning';";
+    html += "    card.title = metricName + ': WARNING - ' + stateData.state;";
+    html += "  } else if (stateCode === 1) {";
+    html += "    card.className = 'sensor-card state-normal';";
+    html += "  }";
     html += "}";
     html += "</script>";
     html += "</head>";
@@ -586,7 +695,7 @@ String AquariumWebServer::generateHomePage() {
     html += "<div class='sensor-grid'>";
 
     // Temperature
-    html += "<div class='sensor-card' style='--card-color: var(--temp-color)'>";
+    html += "<div class='sensor-card' id='tempCard' style='--card-color: var(--temp-color)'>";
     html += "<div class='sensor-label'>Temperature</div>";
     html += "<div class='sensor-value'><span id='temp'>";
     html += dataValid ? String(temp_c, 2) : "--";
@@ -595,7 +704,7 @@ String AquariumWebServer::generateHomePage() {
     html += "</div>";
 
     // ORP
-    html += "<div class='sensor-card' style='--card-color: var(--orp-color)'>";
+    html += "<div class='sensor-card' id='orpCard' style='--card-color: var(--orp-color)'>";
     html += "<div class='sensor-label'>ORP</div>";
     html += "<div class='sensor-value'><span id='orp'>";
     html += dataValid ? String(orp_mv, 2) : "--";
@@ -604,7 +713,7 @@ String AquariumWebServer::generateHomePage() {
     html += "</div>";
 
     // pH
-    html += "<div class='sensor-card' style='--card-color: var(--ph-color)'>";
+    html += "<div class='sensor-card' id='phCard' style='--card-color: var(--ph-color)'>";
     html += "<div class='sensor-label'>pH Level</div>";
     html += "<div class='sensor-value'><span id='ph'>";
     html += dataValid ? String(ph, 2) : "--";
@@ -618,7 +727,7 @@ String AquariumWebServer::generateHomePage() {
     html += "</div>";
 
     // EC
-    html += "<div class='sensor-card' style='--card-color: var(--ec-color)'>";
+    html += "<div class='sensor-card' id='ecCard' style='--card-color: var(--ec-color)'>";
     html += "<div class='sensor-label'>Conductivity</div>";
     html += "<div class='sensor-value'><span id='ec'>";
     html += dataValid ? String(ec_ms_cm, 3) : "--";
@@ -657,7 +766,7 @@ String AquariumWebServer::generateHomePage() {
     html += "</div>";
 
     // Toxic Ammonia Ratio
-    html += "<div class='sensor-card' style='--card-color: var(--nh3-color)'>";
+    html += "<div class='sensor-card' id='nh3Card' style='--card-color: var(--nh3-color)'>";
     html += "<div class='sensor-label'>Toxic NH₃ %</div>";
     html += "<div class='sensor-value'><span id='nh3_ratio'>";
     html += dataValid ? String(toxic_ammonia_ratio * 100.0, 2) : "--";
@@ -682,7 +791,7 @@ String AquariumWebServer::generateHomePage() {
     html += "</div>";
 
     // Maximum Dissolved Oxygen
-    html += "<div class='sensor-card' style='--card-color: var(--do-color)'>";
+    html += "<div class='sensor-card' id='doCard' style='--card-color: var(--do-color)'>";
     html += "<div class='sensor-label'>Max O2 Saturation</div>";
     html += "<div class='sensor-value'><span id='max_do'>";
     html += dataValid ? String(max_do_mg_l, 2) : "--";
@@ -710,9 +819,11 @@ String AquariumWebServer::generateHomePage() {
     html += "setInterval(updateData, 2000);\n";
     html += "setInterval(updateDerivedMetrics, 2000);\n";
     html += "setInterval(updateMqttStatus, 5000);\n";
+    html += "setInterval(updateWarningStates, 2000);\n";
     html += "updateData();\n";
     html += "updateDerivedMetrics();\n";
     html += "updateMqttStatus();\n";
+    html += "updateWarningStates();\n";
     html += "</script>";
     html += "</body>";
     html += "</html>";
@@ -848,6 +959,8 @@ void AquariumWebServer::handleChartsPage(AsyncWebServerRequest *request) {
 }
 
 void AquariumWebServer::handleGetHistory(AsyncWebServerRequest *request) {
+    // ArduinoJson v7 automatically manages memory for large documents
+    // Handles up to 288 data points with 11 fields each
     JsonDocument doc;
 
     doc["ntp_synced"] = ntpInitialized;
@@ -863,18 +976,18 @@ void AquariumWebServer::handleGetHistory(AsyncWebServerRequest *request) {
         if (history[idx].valid) {
             JsonObject point = dataArray.add<JsonObject>();
             point["t"] = (long long)history[idx].timestamp;
-            // Primary sensors
-            point["temp"] = serialized(String(history[idx].temp_c, 2));
-            point["orp"] = serialized(String(history[idx].orp_mv, 2));
-            point["ph"] = serialized(String(history[idx].ph, 2));
-            point["ec"] = serialized(String(history[idx].ec_ms_cm, 3));
+            // Primary sensors - direct assignment for reliable serialization
+            point["temp"] = history[idx].temp_c;
+            point["orp"] = history[idx].orp_mv;
+            point["ph"] = history[idx].ph;
+            point["ec"] = history[idx].ec_ms_cm;
             // Derived metrics
-            point["tds"] = serialized(String(history[idx].tds_ppm, 1));
-            point["co2"] = serialized(String(history[idx].co2_ppm, 2));
-            point["nh3_fraction"] = serialized(String(history[idx].toxic_ammonia_ratio, 4));  // Fraction (0-1), UI multiplies by 100
-            point["nh3_ppm"] = serialized(String(history[idx].nh3_ppm, 4));
-            point["max_do"] = serialized(String(history[idx].max_do_mg_l, 2));
-            point["stock"] = serialized(String(history[idx].stocking_density, 2));
+            point["tds"] = history[idx].tds_ppm;
+            point["co2"] = history[idx].co2_ppm;
+            point["nh3_fraction"] = history[idx].toxic_ammonia_ratio;  // Fraction (0-1), UI multiplies by 100
+            point["nh3_ppm"] = history[idx].nh3_ppm;
+            point["max_do"] = history[idx].max_do_mg_l;
+            point["stocking"] = history[idx].stocking_density;  // Fixed: matches client-side field name
         }
     }
 
@@ -1466,6 +1579,7 @@ String AquariumWebServer::generateCalibrationPage() {
         <button class='tab-button active' onclick='switchTab("calibration")'>🔬 Sensor Calibration</button>
         <button class='tab-button' onclick='switchTab("tank")'>🐠 Tank Settings</button>
         <button class='tab-button' onclick='switchTab("mqtt")'>📡 MQTT Configuration</button>
+        <button class='tab-button' onclick='switchTab("warnings")'>⚠️ Warning Thresholds</button>
     </div>
 
     <!-- Calibration Tab Content -->
@@ -2180,6 +2294,125 @@ String AquariumWebServer::generateCalibrationPage() {
 
     </div> <!-- End MQTT Tab -->
 
+    <!-- Warning Thresholds Tab Content -->
+    <div id='warnings-tab' class='tab-content'>
+
+    <!-- Warning Profile Card -->
+    <div class='card'>
+        <h2>Warning Thresholds Configuration</h2>
+        <div id='warningStatus' class='status'>Loading...</div>
+
+        <div class='info'>
+            <strong>Species-Aware Safety Monitoring:</strong><br>
+            Set warning and critical thresholds for all water parameters. The system will automatically alert you when values approach or exceed safe ranges for your tank type.
+        </div>
+
+        <div class='form-group'>
+            <label>Tank Type Profile:</label>
+            <select id='tank_type' onchange='loadWarningProfile()'>
+                <option value='0'>Freshwater Community</option>
+                <option value='1'>Freshwater Planted</option>
+                <option value='2'>Saltwater Fish-Only</option>
+                <option value='3'>Reef</option>
+                <option value='4'>Custom</option>
+            </select>
+            <small>Presets include species-appropriate threshold defaults</small>
+        </div>
+
+        <button onclick='saveWarningProfile()' class='primary'>Save Tank Type</button>
+
+        <div class='info' style='margin-top: 20px; background: var(--bg-status);'>
+            <strong>Warning States:</strong><br>
+            • <span style='color: #10b981;'>● NORMAL</span> - Parameter within safe range<br>
+            • <span style='color: #f59e0b;'>● WARNING</span> - Approaching unsafe levels (yellow pulse on dashboard)<br>
+            • <span style='color: #ef4444;'>● CRITICAL</span> - Dangerous levels requiring immediate action (red pulse)<br>
+        </div>
+    </div>
+
+    <!-- Current Thresholds Display -->
+    <div class='card'>
+        <h2>Current Threshold Values</h2>
+        <div id='thresholdDisplay'>
+            <p style='color: var(--text-secondary);'>Select a tank type above to view thresholds...</p>
+        </div>
+    </div>
+
+    <script>
+        // Load warning profile on page load
+        function loadWarningProfile() {
+            fetch('/api/warnings/profile')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('tank_type').value = data.tank_type_code;
+
+                    const statusDiv = document.getElementById('warningStatus');
+                    statusDiv.className = 'status calibrated';
+                    statusDiv.textContent = '✓ Active Profile: ' + data.tank_type;
+
+                    // Display thresholds
+                    const thresholdDiv = document.getElementById('thresholdDisplay');
+                    thresholdDiv.innerHTML = `
+                        <h3>Temperature</h3>
+                        <p>⚠ Warning: ${data.temperature.warn_low}°C - ${data.temperature.warn_high}°C</p>
+                        <p>🔴 Critical: ${data.temperature.crit_low}°C - ${data.temperature.crit_high}°C</p>
+
+                        <h3 style='margin-top: 15px;'>pH</h3>
+                        <p>⚠ Warning: ${data.ph.warn_low} - ${data.ph.warn_high}</p>
+                        <p>🔴 Critical: ${data.ph.crit_low} - ${data.ph.crit_high}</p>
+                        <p>Rate limits: ${data.ph.delta_warn_per_24h}/day (warn), ${data.ph.delta_crit_per_24h}/day (crit)</p>
+
+                        <h3 style='margin-top: 15px;'>Toxic Ammonia (NH₃)</h3>
+                        <p>⚠ Warning: > ${data.nh3.warn_high} ppm</p>
+                        <p>🔴 Critical: > ${data.nh3.crit_high} ppm</p>
+
+                        <h3 style='margin-top: 15px;'>ORP</h3>
+                        <p>⚠ Warning: ${data.orp.warn_low}mV - ${data.orp.warn_high}mV</p>
+                        <p>🔴 Critical: ${data.orp.crit_low}mV - ${data.orp.crit_high}mV</p>
+
+                        <h3 style='margin-top: 15px;'>Conductivity</h3>
+                        <p>⚠ Warning: ${data.conductivity.warn_low_us_cm}µS/cm - ${data.conductivity.warn_high_us_cm}µS/cm</p>
+                        <p>🔴 Critical: ${data.conductivity.crit_low_us_cm}µS/cm - ${data.conductivity.crit_high_us_cm}µS/cm</p>
+
+                        <h3 style='margin-top: 15px;'>Dissolved Oxygen</h3>
+                        <p>⚠ Warning: < ${data.dissolved_oxygen.warn_low} mg/L</p>
+                        <p>🔴 Critical: < ${data.dissolved_oxygen.crit_low} mg/L</p>
+                    `;
+                })
+                .catch(err => {
+                    document.getElementById('warningStatus').textContent = 'Error loading profile';
+                    console.error(err);
+                });
+        }
+
+        function saveWarningProfile() {
+            const tankType = document.getElementById('tank_type').value;
+
+            const params = new URLSearchParams();
+            params.append('tank_type', tankType);
+
+            fetch('/api/warnings/profile', { method: 'POST', body: params })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                        loadWarningProfile();
+                    } else {
+                        showMessage(data.error, 'error');
+                    }
+                })
+                .catch(err => {
+                    showMessage('Failed to save profile: ' + err, 'error');
+                });
+        }
+
+        // Auto-load on tab switch
+        if (document.getElementById('warnings-tab').classList.contains('active')) {
+            loadWarningProfile();
+        }
+    </script>
+
+    </div> <!-- End Warnings Tab -->
+
     <div style='text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.85em;'>
         Scott McLelslie to my beloved wife Kate 2026. Happy new year
     </div>
@@ -2205,6 +2438,10 @@ String AquariumWebServer::generateCalibrationPage() {
             if (tabName === 'tank') {
                 loadTankSettings();
                 loadFishList();
+            }
+            // Load warning profile when switching to warnings tab
+            if (tabName === 'warnings') {
+                loadWarningProfile();
             }
         }
 
@@ -2462,7 +2699,7 @@ void AquariumWebServer::handleExportCSV(AsyncWebServerRequest *request) {
     csv += "#\r\n";
 
     // CSV Header
-    csv += "Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,TDS_ppm,CO2_ppm,NH3_Ratio_%,NH3_ppm,Max_DO_mg_L,Stocking_cm_L,Valid\r\n";
+    csv += "Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,TDS_ppm,CO2_ppm,NH3_Ratio_%,NH3_ppm,Max_DO_mg_L,Stocking_cm_L,Temp_State,pH_State,NH3_State,ORP_State,EC_State,DO_State,Valid\r\n";
 
     // Output data in chronological order
     int startIdx = historyCount < HISTORY_SIZE ? 0 : historyHead;
@@ -2515,6 +2752,20 @@ void AquariumWebServer::handleExportCSV(AsyncWebServerRequest *request) {
             csv += String(history[idx].max_do_mg_l, 2);
             csv += ",";
             csv += String(history[idx].stocking_density, 2);
+            csv += ",";
+
+            // Warning states
+            csv += String(history[idx].temp_state);
+            csv += ",";
+            csv += String(history[idx].ph_state);
+            csv += ",";
+            csv += String(history[idx].nh3_state);
+            csv += ",";
+            csv += String(history[idx].orp_state);
+            csv += ",";
+            csv += String(history[idx].ec_state);
+            csv += ",";
+            csv += String(history[idx].do_state);
             csv += ",";
 
             // Valid flag
@@ -2803,6 +3054,155 @@ void AquariumWebServer::handleClearFish(AsyncWebServerRequest *request) {
     JsonDocument doc;
     doc["success"] = true;
     doc["message"] = "All fish cleared successfully";
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void AquariumWebServer::handleGetWarningProfile(AsyncWebServerRequest *request) {
+    if (warningManager == nullptr) {
+        request->send(500, "application/json", "{\"error\":\"Warning manager not initialized\"}");
+        return;
+    }
+
+    WarningProfile profile = warningManager->getProfile();
+
+    JsonDocument doc;
+    doc["tank_type"] = warningManager->getTankTypeString(profile.tank_type);
+    doc["tank_type_code"] = (int)profile.tank_type;
+
+    // Temperature thresholds
+    JsonObject temp = doc["temperature"].to<JsonObject>();
+    temp["warn_low"] = profile.temperature.warn_low;
+    temp["warn_high"] = profile.temperature.warn_high;
+    temp["crit_low"] = profile.temperature.crit_low;
+    temp["crit_high"] = profile.temperature.crit_high;
+    temp["delta_warn_per_hr"] = profile.temperature.delta_warn_per_hr;
+
+    // pH thresholds
+    JsonObject pH = doc["ph"].to<JsonObject>();
+    pH["warn_low"] = profile.ph.warn_low;
+    pH["warn_high"] = profile.ph.warn_high;
+    pH["crit_low"] = profile.ph.crit_low;
+    pH["crit_high"] = profile.ph.crit_high;
+    pH["delta_warn_per_24h"] = profile.ph.delta_warn_per_24h;
+    pH["delta_crit_per_24h"] = profile.ph.delta_crit_per_24h;
+
+    // NH3 thresholds
+    JsonObject nh3 = doc["nh3"].to<JsonObject>();
+    nh3["warn_high"] = profile.nh3.warn_high;
+    nh3["crit_high"] = profile.nh3.crit_high;
+
+    // ORP thresholds
+    JsonObject orp = doc["orp"].to<JsonObject>();
+    orp["warn_low"] = profile.orp.warn_low;
+    orp["warn_high"] = profile.orp.warn_high;
+    orp["crit_low"] = profile.orp.crit_low;
+    orp["crit_high"] = profile.orp.crit_high;
+
+    // Conductivity thresholds
+    JsonObject conductivity = doc["conductivity"].to<JsonObject>();
+    conductivity["warn_low_us_cm"] = profile.conductivity.warn_low_us_cm;
+    conductivity["warn_high_us_cm"] = profile.conductivity.warn_high_us_cm;
+    conductivity["crit_low_us_cm"] = profile.conductivity.crit_low_us_cm;
+    conductivity["crit_high_us_cm"] = profile.conductivity.crit_high_us_cm;
+
+    // Salinity thresholds
+    JsonObject salinity = doc["salinity"].to<JsonObject>();
+    salinity["warn_low_psu"] = profile.salinity.warn_low_psu;
+    salinity["warn_high_psu"] = profile.salinity.warn_high_psu;
+    salinity["crit_low_psu"] = profile.salinity.crit_low_psu;
+    salinity["crit_high_psu"] = profile.salinity.crit_high_psu;
+
+    // Dissolved Oxygen thresholds
+    JsonObject doThresh = doc["dissolved_oxygen"].to<JsonObject>();
+    doThresh["warn_low"] = profile.dissolved_oxygen.warn_low;
+    doThresh["crit_low"] = profile.dissolved_oxygen.crit_low;
+
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+}
+
+void AquariumWebServer::handleSaveWarningProfile(AsyncWebServerRequest *request) {
+    if (warningManager == nullptr) {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"Warning manager not initialized\"}");
+        return;
+    }
+
+    // Check if tank_type parameter was provided
+    if (request->hasParam("tank_type", true)) {
+        int tankType = request->getParam("tank_type", true)->value().toInt();
+        warningManager->setTankType((TankType)tankType);
+        warningManager->saveProfile();
+
+        JsonDocument doc;
+        doc["success"] = true;
+        doc["message"] = "Tank type updated successfully";
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+        return;
+    }
+
+    // Parse JSON body for custom thresholds
+    // This would require async body parsing - for simplicity, we'll just support tank_type change for now
+    // Full custom threshold editing can be added later if needed
+
+    request->send(400, "application/json", "{\"success\":false,\"error\":\"No valid parameters provided\"}");
+}
+
+void AquariumWebServer::handleGetWarningStates(AsyncWebServerRequest *request) {
+    if (warningManager == nullptr) {
+        request->send(500, "application/json", "{\"error\":\"Warning manager not initialized\"}");
+        return;
+    }
+
+    SensorWarningState states = warningManager->getSensorState();
+
+    JsonDocument doc;
+
+    // Temperature state
+    JsonObject temp = doc["temperature"].to<JsonObject>();
+    temp["value"] = temp_c;
+    temp["state"] = warningManager->getStateString((WarningState)states.temperature.state);
+    temp["state_code"] = (int)states.temperature.state;
+
+    // pH state
+    JsonObject pH = doc["ph"].to<JsonObject>();
+    pH["value"] = ph;
+    pH["state"] = warningManager->getStateString((WarningState)states.ph.state);
+    pH["state_code"] = (int)states.ph.state;
+
+    // NH3 state
+    JsonObject nh3 = doc["nh3"].to<JsonObject>();
+    nh3["value"] = nh3_ppm;
+    nh3["state"] = warningManager->getStateString((WarningState)states.nh3.state);
+    nh3["state_code"] = (int)states.nh3.state;
+
+    // ORP state
+    JsonObject orp = doc["orp"].to<JsonObject>();
+    orp["value"] = orp_mv;
+    orp["state"] = warningManager->getStateString((WarningState)states.orp.state);
+    orp["state_code"] = (int)states.orp.state;
+
+    // Conductivity state
+    JsonObject conductivity = doc["conductivity"].to<JsonObject>();
+    conductivity["value"] = ec_ms_cm * 1000.0;  // Convert to µS/cm
+    conductivity["state"] = warningManager->getStateString((WarningState)states.conductivity.state);
+    conductivity["state_code"] = (int)states.conductivity.state;
+
+    // Dissolved Oxygen state
+    JsonObject doState = doc["dissolved_oxygen"].to<JsonObject>();
+    doState["value"] = max_do_mg_l;
+    doState["state"] = warningManager->getStateString((WarningState)states.dissolved_oxygen.state);
+    doState["state_code"] = (int)states.dissolved_oxygen.state;
+
+    // Warning counts
+    doc["warning_count"] = warningManager->getWarningCount();
+    doc["critical_count"] = warningManager->getCriticalCount();
 
     String response;
     serializeJson(doc, response);

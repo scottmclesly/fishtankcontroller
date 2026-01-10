@@ -651,7 +651,35 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         async function fetchHistory() {
             try {
                 const response = await fetch('/api/history');
-                const json = await response.json();
+
+                // Check if response is OK
+                if (!response.ok) {
+                    console.error(`History fetch failed: ${response.status} ${response.statusText}`);
+                    document.getElementById('statusDot').classList.add('warning');
+                    document.getElementById('statusText').textContent = 'Connection Error';
+                    return;
+                }
+
+                // Check content type
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    console.error('History response is not JSON, content-type:', contentType);
+                    document.getElementById('statusDot').classList.add('warning');
+                    document.getElementById('statusText').textContent = 'Connection Error';
+                    return;
+                }
+
+                // Get response text first to check if empty
+                const text = await response.text();
+                if (!text || text.length === 0) {
+                    console.error('History response is empty');
+                    document.getElementById('statusDot').classList.add('warning');
+                    document.getElementById('statusText').textContent = 'Connection Error';
+                    return;
+                }
+
+                // Parse JSON with better error handling
+                const json = JSON.parse(text);
 
                 historyData = json.data || [];
                 ntpSynced = json.ntp_synced;
@@ -670,7 +698,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                 document.getElementById('statusDot').classList.remove('warning');
                 document.getElementById('statusText').textContent = 'Connected';
             } catch (error) {
-                console.error('Error fetching history:', error);
+                console.error('Error fetching history:', error.message || error);
                 document.getElementById('statusDot').classList.add('warning');
                 document.getElementById('statusText').textContent = 'Connection Error';
             }
@@ -815,7 +843,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 
         setInterval(fetchHistory, 5000);
         setInterval(fetchCurrentData, 2000);
-        setInterval(updateMqttStatus, 5000);
+        setInterval(updateMqttStatus, 3500);  // 3.5s to desynchronize from MQTT reconnect timing
     </script>
 
     <div style='text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.85em; background: var(--bg-card); border-radius: 10px; margin-top: 20px; border: 1px solid var(--border-color);'>

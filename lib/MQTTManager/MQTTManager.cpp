@@ -15,7 +15,8 @@ MQTTManager::MQTTManager()
     : mqttClient(nullptr),
       lastPublishTime(0),
       lastReconnectAttempt(0),
-      initialized(false) {
+      initialized(false),
+      currentReconnectInterval(RECONNECT_INTERVAL) {
 
     // Initialize config with defaults
     config.enabled = false;
@@ -81,12 +82,17 @@ void MQTTManager::loop() {
     if (mqttClient->connected()) {
         mqttClient->loop();
     } else {
-        // Attempt reconnection
+        // Attempt reconnection with exponential backoff
         unsigned long now = millis();
-        if (now - lastReconnectAttempt > RECONNECT_INTERVAL) {
+        if (now - lastReconnectAttempt > currentReconnectInterval) {
             lastReconnectAttempt = now;
             if (attemptReconnect()) {
+                // Reset interval on successful connection
+                currentReconnectInterval = RECONNECT_INTERVAL;
                 lastReconnectAttempt = 0;
+            } else {
+                // Exponential backoff on failure (double the interval, cap at MAX_RECONNECT_INTERVAL)
+                currentReconnectInterval = min(currentReconnectInterval * 2, MAX_RECONNECT_INTERVAL);
             }
         }
     }
@@ -315,6 +321,35 @@ bool MQTTManager::publishSensorData(const SensorData& data) {
         success &= mqttClient->publish(getTelemetryTopic("stocking").c_str(), payload, true);
     }
 
+    // Publish warning state topics
+    if (data.valid) {
+        char statePayload[16];
+
+        // Temperature state
+        snprintf(statePayload, sizeof(statePayload), "%d", data.temp_state);
+        success &= mqttClient->publish(getTelemetryTopic("temp_state").c_str(), statePayload, true);
+
+        // pH state
+        snprintf(statePayload, sizeof(statePayload), "%d", data.ph_state);
+        success &= mqttClient->publish(getTelemetryTopic("ph_state").c_str(), statePayload, true);
+
+        // NH3 state
+        snprintf(statePayload, sizeof(statePayload), "%d", data.nh3_state);
+        success &= mqttClient->publish(getTelemetryTopic("nh3_state").c_str(), statePayload, true);
+
+        // ORP state
+        snprintf(statePayload, sizeof(statePayload), "%d", data.orp_state);
+        success &= mqttClient->publish(getTelemetryTopic("orp_state").c_str(), statePayload, true);
+
+        // EC state
+        snprintf(statePayload, sizeof(statePayload), "%d", data.ec_state);
+        success &= mqttClient->publish(getTelemetryTopic("ec_state").c_str(), statePayload, true);
+
+        // DO state
+        snprintf(statePayload, sizeof(statePayload), "%d", data.do_state);
+        success &= mqttClient->publish(getTelemetryTopic("do_state").c_str(), statePayload, true);
+    }
+
     // Also publish combined JSON payload
     JsonDocument doc;
     // Primary sensors
@@ -329,6 +364,13 @@ bool MQTTManager::publishSensorData(const SensorData& data) {
     doc["nh3_ppm"] = data.nh3_ppm;
     doc["max_do_mg_l"] = data.max_do_mg_l;
     doc["stocking_density"] = data.stocking_density;
+    // Warning states
+    doc["temp_state"] = data.temp_state;
+    doc["ph_state"] = data.ph_state;
+    doc["nh3_state"] = data.nh3_state;
+    doc["orp_state"] = data.orp_state;
+    doc["ec_state"] = data.ec_state;
+    doc["do_state"] = data.do_state;
     doc["valid"] = data.valid;
     doc["timestamp"] = now;
 

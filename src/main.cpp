@@ -6,6 +6,7 @@
 #include "CalibrationManager.h"
 #include "MQTTManager.h"
 #include "TankSettingsManager.h"
+#include "WarningManager.h"
 #include "DerivedMetrics.h"
 
 // POET Sensor I2C Configuration
@@ -42,6 +43,7 @@ WiFiManager wifiManager;
 CalibrationManager calibrationManager;
 MQTTManager mqttManager;
 TankSettingsManager tankSettingsManager;
+WarningManager warningManager;
 AquariumWebServer* webServer = nullptr;
 
 // Timing for non-blocking sensor reads
@@ -99,9 +101,18 @@ void setup() {
   Serial.println("Tank Settings Manager initialized");
   Serial.println();
 
+  // Initialize Warning Manager
+  if (!warningManager.begin()) {
+    Serial.println("WARNING: Failed to initialize warning manager");
+  } else {
+    Serial.println("Warning Manager initialized");
+  }
+  Serial.println();
+
   // Initialize Web Server
   webServer = new AquariumWebServer(&wifiManager, &calibrationManager, &mqttManager);
   webServer->setTankSettingsManager(&tankSettingsManager);
+  webServer->setWarningManager(&warningManager);
   webServer->begin();
 
   if (wifiConnected) {
@@ -230,6 +241,15 @@ void loop() {
       sensorData.max_do_mg_l = max_do_mg_l;
       sensorData.stocking_density = stocking_density;
       sensorData.valid = result.valid;
+
+      // Add warning states
+      SensorWarningState warningStates = warningManager.getSensorState();
+      sensorData.temp_state = (uint8_t)warningStates.temperature.state;
+      sensorData.ph_state = (uint8_t)warningStates.ph.state;
+      sensorData.nh3_state = (uint8_t)warningStates.nh3.state;
+      sensorData.orp_state = (uint8_t)warningStates.orp.state;
+      sensorData.ec_state = (uint8_t)warningStates.conductivity.state;
+      sensorData.do_state = (uint8_t)warningStates.dissolved_oxygen.state;
 
       if (mqttManager.publishSensorData(sensorData)) {
         Serial.println("\nMQTT: Sensor data published (including derived metrics)");
@@ -509,7 +529,7 @@ void dumpDataCSV() {
   Serial.println("\n#");
 
   // CSV Header
-  Serial.println("Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,Valid");
+  Serial.println("Timestamp,Unix_Time,Temperature_C,ORP_mV,pH,EC_mS_cm,Temp_State,pH_State,ORP_State,EC_State,Valid");
 
   // Output data in chronological order
   int startIdx = historyCount < HISTORY_SIZE ? 0 : historyHead;
@@ -552,6 +572,16 @@ void dumpDataCSV() {
 
       // EC
       Serial.print(history[idx].ec_ms_cm, 3);
+      Serial.print(",");
+
+      // Warning states
+      Serial.print(history[idx].temp_state);
+      Serial.print(",");
+      Serial.print(history[idx].ph_state);
+      Serial.print(",");
+      Serial.print(history[idx].orp_state);
+      Serial.print(",");
+      Serial.print(history[idx].ec_state);
       Serial.print(",");
 
       // Valid flag

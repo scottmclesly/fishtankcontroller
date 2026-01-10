@@ -12,6 +12,7 @@ class WiFiManager;
 class CalibrationManager;
 class MQTTManager;
 class TankSettingsManager;
+class WarningManager;
 
 // Data history configuration
 #define HISTORY_SIZE 288  // 288 points = 24 hours at 5-minute intervals (or 24 min at 5s intervals)
@@ -31,6 +32,13 @@ struct DataPoint {
     float max_do_mg_l;
     float stocking_density;
     bool valid;
+    // Warning states (0=unknown, 1=normal, 2=warning, 3=critical)
+    uint8_t temp_state;
+    uint8_t ph_state;
+    uint8_t nh3_state;
+    uint8_t orp_state;
+    uint8_t ec_state;
+    uint8_t do_state;
 };
 
 class AquariumWebServer {
@@ -60,12 +68,16 @@ public:
     // Set tank settings manager
     void setTankSettingsManager(TankSettingsManager* mgr);
 
+    // Set warning manager
+    void setWarningManager(WarningManager* mgr);
+
 private:
     AsyncWebServer server;
     WiFiManager* wifiManager;
     CalibrationManager* calibrationManager;
     MQTTManager* mqttManager;
     TankSettingsManager* tankSettingsManager;
+    WarningManager* warningManager;
 
     // Latest sensor readings (raw)
     int32_t raw_temp_mC;
@@ -136,6 +148,9 @@ private:
     void handleAddFish(AsyncWebServerRequest *request);
     void handleRemoveFish(AsyncWebServerRequest *request);
     void handleClearFish(AsyncWebServerRequest *request);
+    void handleGetWarningProfile(AsyncWebServerRequest *request);
+    void handleSaveWarningProfile(AsyncWebServerRequest *request);
+    void handleGetWarningStates(AsyncWebServerRequest *request);
 
     // HTML page generators
     String generateHomePage();
