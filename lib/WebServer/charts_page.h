@@ -635,7 +635,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                 charts.co2.update('none');
 
                 charts.nh3Ratio.data.labels = timestamps;
-                charts.nh3Ratio.data.datasets[0].data = data.map(d => parseFloat(d.nh3_ratio * 100 || 0));
+                charts.nh3Ratio.data.datasets[0].data = data.map(d => (parseFloat(d.nh3_ratio || 0) * 100));
                 charts.nh3Ratio.update('none');
 
                 charts.maxDo.data.labels = timestamps;
@@ -697,11 +697,11 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                     // Fetch derived metrics
                     fetch('/api/metrics/derived').then(r => r.json()).then(derived => {
                         if (derived) {
-                            document.getElementById('currentTds').textContent = derived.tds_ppm.toFixed(1);
-                            document.getElementById('currentCo2').textContent = derived.co2_ppm.toFixed(2);
-                            document.getElementById('currentNh3Ratio').textContent = (derived.toxic_ammonia_ratio * 100).toFixed(2);
-                            document.getElementById('currentMaxDo').textContent = derived.max_do_mg_l.toFixed(2);
-                            document.getElementById('currentStocking').textContent = derived.stocking_density.toFixed(2);
+                            document.getElementById('currentTds').textContent = parseFloat(derived.tds_ppm).toFixed(1);
+                            document.getElementById('currentCo2').textContent = parseFloat(derived.co2_ppm).toFixed(2);
+                            document.getElementById('currentNh3Ratio').textContent = (parseFloat(derived.toxic_ammonia_ratio) * 100).toFixed(2);
+                            document.getElementById('currentMaxDo').textContent = parseFloat(derived.max_do_mg_l).toFixed(2);
+                            document.getElementById('currentStocking').textContent = parseFloat(derived.stocking_density).toFixed(2);
 
                             document.getElementById('tdsTime').textContent = now;
                             document.getElementById('co2Time').textContent = now;

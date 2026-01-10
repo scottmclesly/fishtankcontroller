@@ -525,7 +525,7 @@ String AquariumWebServer::generateHomePage() {
     html += "      if (data.valid) {";
     html += "        document.getElementById('tds').textContent = parseFloat(data.tds_ppm).toFixed(1);";
     html += "        document.getElementById('co2').textContent = parseFloat(data.co2_ppm).toFixed(2);";
-    html += "        document.getElementById('nh3_ratio').textContent = parseFloat(data.toxic_ammonia_ratio).toFixed(2);";
+    html += "        document.getElementById('nh3_ratio').textContent = (parseFloat(data.toxic_ammonia_ratio) * 100).toFixed(2);";
     html += "        document.getElementById('nh3_ppm').textContent = parseFloat(data.nh3_ppm).toFixed(4);";
     html += "        document.getElementById('max_do').textContent = parseFloat(data.max_do_mg_l).toFixed(2);";
     html += "        document.getElementById('stock').textContent = parseFloat(data.stocking_density).toFixed(2);";
@@ -658,16 +658,17 @@ String AquariumWebServer::generateHomePage() {
 
     // Toxic Ammonia Ratio
     html += "<div class='sensor-card' style='--card-color: var(--nh3-color)'>";
-    html += "<div class='sensor-label'>Toxic NH3 Ratio</div>";
+    html += "<div class='sensor-label'>Toxic NH₃ %</div>";
     html += "<div class='sensor-value'><span id='nh3_ratio'>";
     html += dataValid ? String(toxic_ammonia_ratio * 100.0, 2) : "--";
     html += "</span></div>";
     html += "<div class='sensor-unit'>%</div>";
     String nh3AlertDisplay = (dataValid && nh3_ppm > 0.05) ? "" : "style='display:none'";
-    html += "<div id='nh3Alert' class='alert-badge alert-danger' " + nh3AlertDisplay + ">⚠ NH3 > 0.05 ppm</div>";
-    html += "<div style='font-size:0.7em;color:var(--text-tertiary);margin-top:5px'>NH3: <span id='nh3_ppm'>";
+    html += "<div id='nh3Alert' class='alert-badge alert-danger' " + nh3AlertDisplay + ">⚠ NH₃ > 0.05 ppm</div>";
+    html += "<div style='font-size:0.7em;color:var(--text-tertiary);margin-top:5px'>NH₃ ppm: <span id='nh3_ppm'>";
     html += dataValid ? String(nh3_ppm, 4) : "--";
-    html += "</span> ppm</div>";
+    html += "</span></div>";
+    html += "<div class='sensor-status' style='font-size:0.7em;color:var(--text-tertiary)'>Fraction of TAN as toxic NH₃</div>";
     html += "</div>";
 
     // Maximum Dissolved Oxygen
@@ -860,7 +861,7 @@ void AquariumWebServer::handleGetHistory(AsyncWebServerRequest *request) {
             // Derived metrics
             point["tds"] = serialized(String(history[idx].tds_ppm, 1));
             point["co2"] = serialized(String(history[idx].co2_ppm, 2));
-            point["nh3_ratio"] = serialized(String(history[idx].toxic_ammonia_ratio * 100.0, 2));
+            point["nh3_ratio"] = serialized(String(history[idx].toxic_ammonia_ratio, 4));  // As fraction (0-1), UI multiplies by 100
             point["nh3_ppm"] = serialized(String(history[idx].nh3_ppm, 4));
             point["max_do"] = serialized(String(history[idx].max_do_mg_l, 2));
             point["stock"] = serialized(String(history[idx].stocking_density, 2));
@@ -2585,7 +2586,7 @@ void AquariumWebServer::handleGetDerivedMetrics(AsyncWebServerRequest *request) 
 
     doc["tds_ppm"] = serialized(String(tds_ppm, 2));
     doc["co2_ppm"] = serialized(String(co2_ppm, 2));
-    doc["toxic_ammonia_ratio"] = serialized(String(toxic_ammonia_ratio * 100.0, 2));  // As percentage
+    doc["toxic_ammonia_ratio"] = serialized(String(toxic_ammonia_ratio, 4));  // As fraction (0-1), UI multiplies by 100
     doc["nh3_ppm"] = serialized(String(nh3_ppm, 4));
     doc["max_do_mg_l"] = serialized(String(max_do_mg_l, 2));
     doc["stocking_density"] = serialized(String(stocking_density, 2));

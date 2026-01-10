@@ -23,20 +23,26 @@ float DerivedMetrics::calculateCO2(float ph, float kh_dkh) {
 
 float DerivedMetrics::calculateToxicAmmoniaRatio(float temp_c, float ph) {
     // Calculate the fraction of total ammonia (TAN) that exists as toxic NH3
-    // Based on temperature-dependent dissociation equilibrium
+    // Based on temperature-dependent dissociation equilibrium (Emerson et al. 1975)
     //
-    // Formula:
+    // Formula (freshwater):
     // 1. Convert temp to Kelvin: T_k = temp_c + 273.15
     // 2. Calculate pKa: pKa = 0.09018 + (2729.92 / T_k)
     // 3. Calculate fraction: f = 1 / (10^(pKa - pH) + 1)
+    //
+    // Returns fraction (0.0-1.0), NOT percentage
+    // Multiply by 100 in UI layer for percentage display
 
-    if (temp_c < 0.0 || temp_c > 50.0 || ph < 0.0 || ph > 14.0) return 0.0;
+    // Strict input validation
+    if (temp_c < 0.0 || temp_c > 50.0) return 0.0;
+    if (ph < 0.0 || ph > 14.0) return 0.0;
 
     float t_kelvin = temp_c + 273.15;
     float pKa = 0.09018 + (2729.92 / t_kelvin);
     float fraction = 1.0 / (pow(10.0, (pKa - ph)) + 1.0);
 
-    // Fraction should be between 0 and 1
+    // Hard clamp to valid range [0, 1]
+    // This should never trigger with correct formula, but prevents display bugs
     if (fraction < 0.0) fraction = 0.0;
     if (fraction > 1.0) fraction = 1.0;
 
