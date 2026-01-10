@@ -297,11 +297,12 @@ bool MQTTManager::publishSensorData(const SensorData& data) {
         snprintf(payload, sizeof(payload), "%.2f", data.co2_ppm);
         success &= mqttClient->publish(getTelemetryTopic("co2").c_str(), payload, true);
 
-        // NH3 Ratio (as percentage)
+        // NH3 Fraction (as percentage 0-100)
+        // Topic name is self-describing: "nh3_fraction_percent"
         snprintf(payload, sizeof(payload), "%.2f", data.nh3_ratio * 100.0);
-        success &= mqttClient->publish(getTelemetryTopic("nh3_ratio").c_str(), payload, true);
+        success &= mqttClient->publish(getTelemetryTopic("nh3_fraction_percent").c_str(), payload, true);
 
-        // NH3 PPM
+        // NH3 PPM (toxic ammonia concentration)
         snprintf(payload, sizeof(payload), "%.3f", data.nh3_ppm);
         success &= mqttClient->publish(getTelemetryTopic("nh3_ppm").c_str(), payload, true);
 
@@ -386,7 +387,7 @@ bool MQTTManager::publishDiscovery() {
     // Derived metrics
     success &= publishSensor("tds", "", "ppm", "mdi:water-opacity");
     success &= publishSensor("co2", "", "ppm", "mdi:molecule-co2");
-    success &= publishSensor("nh3_ratio", "", "%", "mdi:alert-circle");
+    success &= publishSensor("nh3_fraction_percent", "", "%", "mdi:alert-circle");
     success &= publishSensor("nh3_ppm", "", "ppm", "mdi:biohazard");
     success &= publishSensor("max_do", "", "mg/L", "mdi:air-filter");
     success &= publishSensor("stocking", "", "cm/L", "mdi:fish");

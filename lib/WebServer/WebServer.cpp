@@ -525,7 +525,7 @@ String AquariumWebServer::generateHomePage() {
     html += "      if (data.valid) {";
     html += "        document.getElementById('tds').textContent = parseFloat(data.tds_ppm).toFixed(1);";
     html += "        document.getElementById('co2').textContent = parseFloat(data.co2_ppm).toFixed(2);";
-    html += "        document.getElementById('nh3_ratio').textContent = (parseFloat(data.toxic_ammonia_ratio) * 100).toFixed(2);";
+    html += "        document.getElementById('nh3_ratio').textContent = (parseFloat(data.nh3_fraction) * 100).toFixed(2);";
     html += "        document.getElementById('nh3_ppm').textContent = parseFloat(data.nh3_ppm).toFixed(4);";
     html += "        document.getElementById('max_do').textContent = parseFloat(data.max_do_mg_l).toFixed(2);";
     html += "        document.getElementById('stock').textContent = parseFloat(data.stocking_density).toFixed(2);";
@@ -668,7 +668,17 @@ String AquariumWebServer::generateHomePage() {
     html += "<div style='font-size:0.7em;color:var(--text-tertiary);margin-top:5px'>NH₃ ppm: <span id='nh3_ppm'>";
     html += dataValid ? String(nh3_ppm, 4) : "--";
     html += "</span></div>";
-    html += "<div class='sensor-status' style='font-size:0.7em;color:var(--text-tertiary)'>Fraction of TAN as toxic NH₃</div>";
+
+    // Show TAN requirement note if TAN is not set
+    float current_tan = 0.0;
+    if (tankSettingsManager != nullptr) {
+        current_tan = tankSettingsManager->getSettings().manual_tan_ppm;
+    }
+    if (current_tan <= 0.0) {
+        html += "<div id='nh3_tan_note' class='sensor-status' style='font-size:0.7em;color:var(--text-tertiary)'>⚠ Set TAN in settings for actual NH₃ ppm</div>";
+    } else {
+        html += "<div id='nh3_tan_note' class='sensor-status' style='font-size:0.7em;color:var(--text-tertiary)'>Fraction of TAN as toxic NH₃</div>";
+    }
     html += "</div>";
 
     // Maximum Dissolved Oxygen
@@ -861,7 +871,7 @@ void AquariumWebServer::handleGetHistory(AsyncWebServerRequest *request) {
             // Derived metrics
             point["tds"] = serialized(String(history[idx].tds_ppm, 1));
             point["co2"] = serialized(String(history[idx].co2_ppm, 2));
-            point["nh3_ratio"] = serialized(String(history[idx].toxic_ammonia_ratio, 4));  // As fraction (0-1), UI multiplies by 100
+            point["nh3_fraction"] = serialized(String(history[idx].toxic_ammonia_ratio, 4));  // Fraction (0-1), UI multiplies by 100
             point["nh3_ppm"] = serialized(String(history[idx].nh3_ppm, 4));
             point["max_do"] = serialized(String(history[idx].max_do_mg_l, 2));
             point["stock"] = serialized(String(history[idx].stocking_density, 2));
@@ -2581,12 +2591,25 @@ void AquariumWebServer::handleExportJSON(AsyncWebServerRequest *request) {
 }
 
 // Derived metrics API handler
+//
+// API CONTRACT: All metrics returned as raw values (fractions, not percentages)
+// - nh3_fraction: fraction (0.0-1.0) of TAN that exists as unionized NH₃
+// - UI layer multiplies by 100 for percentage display
+// - DO NOT multiply by 100 in this API - prevents double-multiplication bugs
 void AquariumWebServer::handleGetDerivedMetrics(AsyncWebServerRequest *request) {
     JsonDocument doc;
 
     doc["tds_ppm"] = serialized(String(tds_ppm, 2));
     doc["co2_ppm"] = serialized(String(co2_ppm, 2));
-    doc["toxic_ammonia_ratio"] = serialized(String(toxic_ammonia_ratio, 4));  // As fraction (0-1), UI multiplies by 100
+
+    // NH3 fraction: MUST be 0.0-1.0 (fraction, not percentage)
+    #ifdef DEBUG
+    if (toxic_ammonia_ratio > 1.01 || toxic_ammonia_ratio < -0.01) {
+        Serial.print("ERROR: NH3 fraction out of range: ");
+        Serial.println(toxic_ammonia_ratio);
+    }
+    #endif
+    doc["nh3_fraction"] = serialized(String(toxic_ammonia_ratio, 4));  // Fraction (0-1)
     doc["nh3_ppm"] = serialized(String(nh3_ppm, 4));
     doc["max_do_mg_l"] = serialized(String(max_do_mg_l, 2));
     doc["stocking_density"] = serialized(String(stocking_density, 2));
