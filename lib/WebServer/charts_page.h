@@ -82,6 +82,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             display: flex;
             gap: 15px;
             align-items: center;
+            flex-wrap: wrap;
         }
         .nav a, .nav button, .theme-toggle {
             padding: 10px 20px;
@@ -143,11 +144,6 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             font-size: 0.9em;
             color: var(--text-tertiary);
             font-weight: 500;
-        }
-        .stat-time {
-            font-size: 0.75em;
-            color: var(--text-tertiary);
-            margin-top: 5px;
         }
         .chart-container {
             background: var(--bg-card);
@@ -217,13 +213,6 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             animation: pulse 2s ease-in-out infinite;
         }
         .status-dot.warning { background: #f59e0b; }
-        .view-toggles {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
         .toggle-btn {
             padding: 10px 20px;
             background: var(--bg-card);
@@ -257,6 +246,9 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
     <div class='header'>
         <h1>📊 Kate's Aquarium #7 Analytics</h1>
         <div class='nav'>
+            <button class='toggle-btn active' onclick='switchView("all")' id='btnAll'>📊 All Metrics</button>
+            <button class='toggle-btn' onclick='switchView("primary")' id='btnPrimary'>🔬 Primary Sensors</button>
+            <button class='toggle-btn' onclick='switchView("derived")' id='btnDerived'>📈 Derived Metrics</button>
             <button class='theme-toggle' onclick='window.location.href="/calibration"' title='Calibration'>⚙️</button>
         </div>
     </div>
@@ -285,62 +277,47 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             <div class='stat-label'>Temperature</div>
             <div class='stat-value'><span id='currentTemp'>--</span></div>
             <div class='stat-unit'>°Celsius</div>
-            <div class='stat-time' id='tempTime'>--</div>
         </div>
         <div class='stat-card' style='--stat-color: var(--orp-color)'>
             <div class='stat-label'>ORP</div>
             <div class='stat-value'><span id='currentOrp'>--</span></div>
             <div class='stat-unit'>millivolts</div>
-            <div class='stat-time' id='orpTime'>--</div>
         </div>
         <div class='stat-card' style='--stat-color: var(--ph-color)'>
             <div class='stat-label'>pH Level</div>
             <div class='stat-value'><span id='currentPh'>--</span></div>
             <div class='stat-unit'>pH units</div>
-            <div class='stat-time' id='phTime'>--</div>
         </div>
         <div class='stat-card' style='--stat-color: var(--ec-color)'>
             <div class='stat-label'>Conductivity</div>
             <div class='stat-value'><span id='currentEc'>--</span></div>
             <div class='stat-unit'>mS/cm</div>
-            <div class='stat-time' id='ecTime'>--</div>
         </div>
         <div class='stat-card' style='--stat-color: var(--tds-color)'>
             <div class='stat-label'>TDS</div>
             <div class='stat-value'><span id='currentTds'>--</span></div>
             <div class='stat-unit'>ppm</div>
-            <div class='stat-time' id='tdsTime'>--</div>
         </div>
         <div class='stat-card' style='--stat-color: var(--co2-color)'>
             <div class='stat-label'>Dissolved CO₂</div>
             <div class='stat-value'><span id='currentCo2'>--</span></div>
             <div class='stat-unit'>ppm</div>
-            <div class='stat-time' id='co2Time'>--</div>
         </div>
         <div class='stat-card' style='--stat-color: var(--nh3-color)'>
             <div class='stat-label'>NH₃ Ratio</div>
             <div class='stat-value'><span id='currentNh3Ratio'>--</span></div>
             <div class='stat-unit'>%</div>
-            <div class='stat-time' id='nh3RatioTime'>--</div>
         </div>
         <div class='stat-card' style='--stat-color: var(--do-color)'>
             <div class='stat-label'>Max DO</div>
             <div class='stat-value'><span id='currentMaxDo'>--</span></div>
             <div class='stat-unit'>mg/L</div>
-            <div class='stat-time' id='maxDoTime'>--</div>
         </div>
         <div class='stat-card' style='--stat-color: var(--stocking-color)'>
             <div class='stat-label'>Stocking Density</div>
             <div class='stat-value'><span id='currentStocking'>--</span></div>
             <div class='stat-unit'>cm/L</div>
-            <div class='stat-time' id='stockingTime'>--</div>
         </div>
-    </div>
-
-    <div class='view-toggles'>
-        <button class='toggle-btn active' onclick='switchView("all")' id='btnAll'>📊 All Metrics</button>
-        <button class='toggle-btn' onclick='switchView("primary")' id='btnPrimary'>🔬 Primary Sensors</button>
-        <button class='toggle-btn' onclick='switchView("derived")' id='btnDerived'>📈 Derived Metrics</button>
     </div>
 
     <div class='chart-section primary-charts'>
@@ -459,6 +436,167 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         let charts = {};
         let historyData = [];
         let ntpSynced = false;
+
+        // Connection state manager with debouncing and exponential backoff
+        const ConnectionState = {
+            failureCount: 0,
+            successCount: 0,
+            isConnected: true,
+            lastStatusChange: 0,
+            backoffLevel: 0,
+            retryTimer: null,
+            retryCountdown: 0,
+
+            // Configuration
+            FAILURE_THRESHOLD: 2,      // Require 2 consecutive failures before showing error
+            SUCCESS_THRESHOLD: 1,       // Require 1 success to restore connected state
+            DEBOUNCE_MS: 1000,         // Don't change status more than once per second
+            BACKOFF_INTERVALS: [2000, 5000, 10000, 30000], // Progressive backoff: 2s, 5s, 10s, 30s
+
+            // Polling interval control
+            currentHistoryInterval: 5000,
+            currentSensorsInterval: 2000,
+            currentMqttInterval: 3500,
+            historyIntervalId: null,
+            sensorsIntervalId: null,
+            mqttIntervalId: null,
+
+            recordSuccess() {
+                this.successCount++;
+                this.failureCount = 0;
+                this.backoffLevel = 0; // Reset backoff on success
+
+                if (!this.isConnected && this.successCount >= this.SUCCESS_THRESHOLD) {
+                    this.setConnected(true);
+                    this.restoreNormalPolling();
+                }
+            },
+
+            recordFailure() {
+                this.failureCount++;
+                this.successCount = 0;
+
+                if (this.isConnected && this.failureCount >= this.FAILURE_THRESHOLD) {
+                    this.setConnected(false);
+                    this.startBackoff();
+                } else if (!this.isConnected) {
+                    this.increaseBackoff();
+                }
+            },
+
+            setConnected(connected) {
+                const now = Date.now();
+                if (now - this.lastStatusChange < this.DEBOUNCE_MS) {
+                    return; // Debounce rapid changes
+                }
+
+                this.isConnected = connected;
+                this.lastStatusChange = now;
+
+                const statusDot = document.getElementById('statusDot');
+                const statusText = document.getElementById('statusText');
+
+                if (connected) {
+                    statusDot.classList.remove('warning');
+                    statusText.textContent = 'Connected';
+                    this.stopRetryCountdown();
+                } else {
+                    statusDot.classList.add('warning');
+                    this.startRetryCountdown();
+                }
+            },
+
+            startBackoff() {
+                this.backoffLevel = 0;
+                this.adjustPollingIntervals();
+            },
+
+            increaseBackoff() {
+                if (this.backoffLevel < this.BACKOFF_INTERVALS.length - 1) {
+                    this.backoffLevel++;
+                    this.adjustPollingIntervals();
+                }
+            },
+
+            getCurrentBackoffInterval() {
+                return this.BACKOFF_INTERVALS[this.backoffLevel];
+            },
+
+            adjustPollingIntervals() {
+                const backoffMs = this.getCurrentBackoffInterval();
+
+                // Clear existing intervals
+                if (this.historyIntervalId) clearInterval(this.historyIntervalId);
+                if (this.sensorsIntervalId) clearInterval(this.sensorsIntervalId);
+                if (this.mqttIntervalId) clearInterval(this.mqttIntervalId);
+
+                // Set new intervals with backoff
+                this.currentHistoryInterval = Math.max(5000, backoffMs);
+                this.currentSensorsInterval = Math.max(2000, backoffMs);
+                this.currentMqttInterval = Math.max(3500, backoffMs);
+
+                this.historyIntervalId = setInterval(fetchHistory, this.currentHistoryInterval);
+                this.sensorsIntervalId = setInterval(fetchCurrentData, this.currentSensorsInterval);
+                this.mqttIntervalId = setInterval(updateMqttStatus, this.currentMqttInterval);
+
+                console.log(`Polling adjusted: backoff=${backoffMs}ms, history=${this.currentHistoryInterval}ms, sensors=${this.currentSensorsInterval}ms`);
+            },
+
+            restoreNormalPolling() {
+                // Clear existing intervals
+                if (this.historyIntervalId) clearInterval(this.historyIntervalId);
+                if (this.sensorsIntervalId) clearInterval(this.sensorsIntervalId);
+                if (this.mqttIntervalId) clearInterval(this.mqttIntervalId);
+
+                // Restore original intervals
+                this.currentHistoryInterval = 5000;
+                this.currentSensorsInterval = 2000;
+                this.currentMqttInterval = 3500;
+
+                this.historyIntervalId = setInterval(fetchHistory, 5000);
+                this.sensorsIntervalId = setInterval(fetchCurrentData, 2000);
+                this.mqttIntervalId = setInterval(updateMqttStatus, 3500);
+
+                console.log('Polling restored to normal intervals');
+            },
+
+            startRetryCountdown() {
+                this.stopRetryCountdown(); // Clear any existing countdown
+
+                const updateCountdown = () => {
+                    const nextRetryInterval = Math.min(
+                        this.currentHistoryInterval,
+                        this.currentSensorsInterval,
+                        this.currentMqttInterval
+                    );
+
+                    this.retryCountdown = Math.ceil(nextRetryInterval / 1000);
+                    const statusText = document.getElementById('statusText');
+
+                    const tick = () => {
+                        if (this.retryCountdown > 0 && !this.isConnected) {
+                            statusText.textContent = `Connection Error (retry in ${this.retryCountdown}s)`;
+                            this.retryCountdown--;
+                            this.retryTimer = setTimeout(tick, 1000);
+                        } else if (!this.isConnected) {
+                            statusText.textContent = 'Connection Error (retrying...)';
+                            setTimeout(updateCountdown, nextRetryInterval);
+                        }
+                    };
+
+                    tick();
+                };
+
+                updateCountdown();
+            },
+
+            stopRetryCountdown() {
+                if (this.retryTimer) {
+                    clearTimeout(this.retryTimer);
+                    this.retryTimer = null;
+                }
+            }
+        };
 
         function initTheme() {
             const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -652,35 +790,27 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
             try {
                 const response = await fetch('/api/history');
 
-                // Check if response is OK
                 if (!response.ok) {
                     console.error(`History fetch failed: ${response.status} ${response.statusText}`);
-                    document.getElementById('statusDot').classList.add('warning');
-                    document.getElementById('statusText').textContent = 'Connection Error';
+                    ConnectionState.recordFailure();
                     return;
                 }
 
-                // Check content type
                 const contentType = response.headers.get('content-type');
                 if (!contentType || !contentType.includes('application/json')) {
                     console.error('History response is not JSON, content-type:', contentType);
-                    document.getElementById('statusDot').classList.add('warning');
-                    document.getElementById('statusText').textContent = 'Connection Error';
+                    ConnectionState.recordFailure();
                     return;
                 }
 
-                // Get response text first to check if empty
                 const text = await response.text();
                 if (!text || text.length === 0) {
                     console.error('History response is empty');
-                    document.getElementById('statusDot').classList.add('warning');
-                    document.getElementById('statusText').textContent = 'Connection Error';
+                    ConnectionState.recordFailure();
                     return;
                 }
 
-                // Parse JSON with better error handling
                 const json = JSON.parse(text);
-
                 historyData = json.data || [];
                 ntpSynced = json.ntp_synced;
 
@@ -694,19 +824,24 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                 }
 
                 updateCharts(historyData);
+                ConnectionState.recordSuccess();
 
-                document.getElementById('statusDot').classList.remove('warning');
-                document.getElementById('statusText').textContent = 'Connected';
             } catch (error) {
                 console.error('Error fetching history:', error.message || error);
-                document.getElementById('statusDot').classList.add('warning');
-                document.getElementById('statusText').textContent = 'Connection Error';
+                ConnectionState.recordFailure();
             }
         }
 
         async function fetchCurrentData() {
             try {
                 const response = await fetch('/api/sensors');
+
+                if (!response.ok) {
+                    console.error(`Sensors fetch failed: ${response.status}`);
+                    ConnectionState.recordFailure();
+                    return;
+                }
+
                 const data = await response.json();
 
                 if (data.valid) {
@@ -717,30 +852,29 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                     document.getElementById('currentEc').textContent = data.ec_ms_cm.toFixed(3);
 
                     const now = new Date().toLocaleTimeString();
-                    document.getElementById('tempTime').textContent = now;
-                    document.getElementById('orpTime').textContent = now;
-                    document.getElementById('phTime').textContent = now;
-                    document.getElementById('ecTime').textContent = now;
-
                     // Fetch derived metrics
-                    fetch('/api/metrics/derived').then(r => r.json()).then(derived => {
-                        if (derived) {
-                            document.getElementById('currentTds').textContent = parseFloat(derived.tds_ppm).toFixed(1);
-                            document.getElementById('currentCo2').textContent = parseFloat(derived.co2_ppm).toFixed(2);
-                            document.getElementById('currentNh3Ratio').textContent = (parseFloat(derived.nh3_fraction) * 100).toFixed(2);
-                            document.getElementById('currentMaxDo').textContent = parseFloat(derived.max_do_mg_l).toFixed(2);
-                            document.getElementById('currentStocking').textContent = parseFloat(derived.stocking_density).toFixed(2);
-
-                            document.getElementById('tdsTime').textContent = now;
-                            document.getElementById('co2Time').textContent = now;
-                            document.getElementById('nh3RatioTime').textContent = now;
-                            document.getElementById('maxDoTime').textContent = now;
-                            document.getElementById('stockingTime').textContent = now;
-                        }
-                    }).catch(err => console.log('Derived metrics not available:', err));
+                    fetch('/api/metrics/derived')
+                        .then(r => {
+                            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                            return r.json();
+                        })
+                        .then(derived => {
+                            if (derived) {
+                                document.getElementById('currentTds').textContent = parseFloat(derived.tds_ppm).toFixed(1);
+                                document.getElementById('currentCo2').textContent = parseFloat(derived.co2_ppm).toFixed(2);
+                                document.getElementById('currentNh3Ratio').textContent = (parseFloat(derived.nh3_fraction) * 100).toFixed(2);
+                                document.getElementById('currentMaxDo').textContent = parseFloat(derived.max_do_mg_l).toFixed(2);
+                                document.getElementById('currentStocking').textContent = parseFloat(derived.stocking_density).toFixed(2);
+                            }
+                        })
+                        .catch(err => console.log('Derived metrics not available:', err));
                 }
+
+                ConnectionState.recordSuccess();
+
             } catch (error) {
                 console.error('Error fetching current data:', error);
+                ConnectionState.recordFailure();
             } finally {
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
             }
@@ -816,7 +950,10 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 
         function updateMqttStatus() {
             fetch('/api/mqtt/status')
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                })
                 .then(data => {
                     const statusEl = document.getElementById('mqttStatus');
                     if (data.connected) {
@@ -832,6 +969,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
                 })
                 .catch(err => {
                     console.error('MQTT status fetch failed:', err);
+                    // Don't update MQTT status on failure - leave at previous value
                 });
         }
 
@@ -841,9 +979,10 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
         fetchCurrentData();
         updateMqttStatus();
 
-        setInterval(fetchHistory, 5000);
-        setInterval(fetchCurrentData, 2000);
-        setInterval(updateMqttStatus, 3500);  // 3.5s to desynchronize from MQTT reconnect timing
+        // Initialize intervals through ConnectionState manager
+        ConnectionState.historyIntervalId = setInterval(fetchHistory, 5000);
+        ConnectionState.sensorsIntervalId = setInterval(fetchCurrentData, 2000);
+        ConnectionState.mqttIntervalId = setInterval(updateMqttStatus, 3500);
     </script>
 
     <div style='text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.85em; background: var(--bg-card); border-radius: 10px; margin-top: 20px; border: 1px solid var(--border-color);'>

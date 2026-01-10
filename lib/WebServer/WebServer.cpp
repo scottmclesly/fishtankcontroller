@@ -546,9 +546,136 @@ String AquariumWebServer::generateHomePage() {
     html += "  // Theme toggle button removed from this page";
     html += "  // Theme is now managed in calibration settings";
     html += "}\n";
+    html += "const ConnectionState = {\n";
+    html += "  failureCount: 0,\n";
+    html += "  successCount: 0,\n";
+    html += "  isConnected: true,\n";
+    html += "  lastStatusChange: 0,\n";
+    html += "  backoffLevel: 0,\n";
+    html += "  retryTimer: null,\n";
+    html += "  retryCountdown: 0,\n";
+    html += "  FAILURE_THRESHOLD: 2,\n";
+    html += "  SUCCESS_THRESHOLD: 1,\n";
+    html += "  DEBOUNCE_MS: 1000,\n";
+    html += "  BACKOFF_INTERVALS: [2000, 5000, 10000, 30000],\n";
+    html += "  currentDataInterval: 2000,\n";
+    html += "  currentMetricsInterval: 2000,\n";
+    html += "  currentMqttInterval: 5000,\n";
+    html += "  currentWarningsInterval: 2000,\n";
+    html += "  dataIntervalId: null,\n";
+    html += "  metricsIntervalId: null,\n";
+    html += "  mqttIntervalId: null,\n";
+    html += "  warningsIntervalId: null,\n";
+    html += "  recordSuccess() {\n";
+    html += "    this.successCount++;\n";
+    html += "    this.failureCount = 0;\n";
+    html += "    this.backoffLevel = 0;\n";
+    html += "    if (!this.isConnected && this.successCount >= this.SUCCESS_THRESHOLD) {\n";
+    html += "      this.setConnected(true);\n";
+    html += "      this.restoreNormalPolling();\n";
+    html += "    }\n";
+    html += "  },\n";
+    html += "  recordFailure() {\n";
+    html += "    this.failureCount++;\n";
+    html += "    this.successCount = 0;\n";
+    html += "    if (this.isConnected && this.failureCount >= this.FAILURE_THRESHOLD) {\n";
+    html += "      this.setConnected(false);\n";
+    html += "      this.startBackoff();\n";
+    html += "    } else if (!this.isConnected) {\n";
+    html += "      this.increaseBackoff();\n";
+    html += "    }\n";
+    html += "  },\n";
+    html += "  setConnected(connected) {\n";
+    html += "    const now = Date.now();\n";
+    html += "    if (now - this.lastStatusChange < this.DEBOUNCE_MS) return;\n";
+    html += "    this.isConnected = connected;\n";
+    html += "    this.lastStatusChange = now;\n";
+    html += "    const statusDot = document.getElementById('statusDot');\n";
+    html += "    const statusText = document.getElementById('statusText');\n";
+    html += "    if (connected) {\n";
+    html += "      statusDot.style.background = '#10b981';\n";
+    html += "      statusText.textContent = 'Connected';\n";
+    html += "      this.stopRetryCountdown();\n";
+    html += "    } else {\n";
+    html += "      statusDot.style.background = '#f59e0b';\n";
+    html += "      this.startRetryCountdown();\n";
+    html += "    }\n";
+    html += "  },\n";
+    html += "  startBackoff() {\n";
+    html += "    this.backoffLevel = 0;\n";
+    html += "    this.adjustPollingIntervals();\n";
+    html += "  },\n";
+    html += "  increaseBackoff() {\n";
+    html += "    if (this.backoffLevel < this.BACKOFF_INTERVALS.length - 1) {\n";
+    html += "      this.backoffLevel++;\n";
+    html += "      this.adjustPollingIntervals();\n";
+    html += "    }\n";
+    html += "  },\n";
+    html += "  adjustPollingIntervals() {\n";
+    html += "    const backoffMs = this.BACKOFF_INTERVALS[this.backoffLevel];\n";
+    html += "    if (this.dataIntervalId) clearInterval(this.dataIntervalId);\n";
+    html += "    if (this.metricsIntervalId) clearInterval(this.metricsIntervalId);\n";
+    html += "    if (this.mqttIntervalId) clearInterval(this.mqttIntervalId);\n";
+    html += "    if (this.warningsIntervalId) clearInterval(this.warningsIntervalId);\n";
+    html += "    this.currentDataInterval = Math.max(2000, backoffMs);\n";
+    html += "    this.currentMetricsInterval = Math.max(2000, backoffMs);\n";
+    html += "    this.currentMqttInterval = Math.max(5000, backoffMs);\n";
+    html += "    this.currentWarningsInterval = Math.max(2000, backoffMs);\n";
+    html += "    this.dataIntervalId = setInterval(updateData, this.currentDataInterval);\n";
+    html += "    this.metricsIntervalId = setInterval(updateDerivedMetrics, this.currentMetricsInterval);\n";
+    html += "    this.mqttIntervalId = setInterval(updateMqttStatus, this.currentMqttInterval);\n";
+    html += "    this.warningsIntervalId = setInterval(updateWarningStates, this.currentWarningsInterval);\n";
+    html += "    console.log('Polling adjusted: backoff=' + backoffMs + 'ms');\n";
+    html += "  },\n";
+    html += "  restoreNormalPolling() {\n";
+    html += "    if (this.dataIntervalId) clearInterval(this.dataIntervalId);\n";
+    html += "    if (this.metricsIntervalId) clearInterval(this.metricsIntervalId);\n";
+    html += "    if (this.mqttIntervalId) clearInterval(this.mqttIntervalId);\n";
+    html += "    if (this.warningsIntervalId) clearInterval(this.warningsIntervalId);\n";
+    html += "    this.currentDataInterval = 2000;\n";
+    html += "    this.currentMetricsInterval = 2000;\n";
+    html += "    this.currentMqttInterval = 5000;\n";
+    html += "    this.currentWarningsInterval = 2000;\n";
+    html += "    this.dataIntervalId = setInterval(updateData, 2000);\n";
+    html += "    this.metricsIntervalId = setInterval(updateDerivedMetrics, 2000);\n";
+    html += "    this.mqttIntervalId = setInterval(updateMqttStatus, 5000);\n";
+    html += "    this.warningsIntervalId = setInterval(updateWarningStates, 2000);\n";
+    html += "    console.log('Polling restored to normal intervals');\n";
+    html += "  },\n";
+    html += "  startRetryCountdown() {\n";
+    html += "    this.stopRetryCountdown();\n";
+    html += "    const self = this;\n";
+    html += "    const updateCountdown = function() {\n";
+    html += "      const nextRetryInterval = Math.min(self.currentDataInterval, self.currentMetricsInterval, self.currentMqttInterval, self.currentWarningsInterval);\n";
+    html += "      self.retryCountdown = Math.ceil(nextRetryInterval / 1000);\n";
+    html += "      const statusText = document.getElementById('statusText');\n";
+    html += "      const tick = function() {\n";
+    html += "        if (self.retryCountdown > 0 && !self.isConnected) {\n";
+    html += "          statusText.textContent = 'Connection Error (retry in ' + self.retryCountdown + 's)';\n";
+    html += "          self.retryCountdown--;\n";
+    html += "          self.retryTimer = setTimeout(tick, 1000);\n";
+    html += "        } else if (!self.isConnected) {\n";
+    html += "          statusText.textContent = 'Connection Error (retrying...)';\n";
+    html += "          setTimeout(updateCountdown, nextRetryInterval);\n";
+    html += "        }\n";
+    html += "      };\n";
+    html += "      tick();\n";
+    html += "    };\n";
+    html += "    updateCountdown();\n";
+    html += "  },\n";
+    html += "  stopRetryCountdown() {\n";
+    html += "    if (this.retryTimer) {\n";
+    html += "      clearTimeout(this.retryTimer);\n";
+    html += "      this.retryTimer = null;\n";
+    html += "    }\n";
+    html += "  }\n";
+    html += "};\n";
     html += "function updateData() {";
     html += "  fetch('/api/sensors')";
-    html += "    .then(response => response.json())";
+    html += "    .then(response => {";
+    html += "      if (!response.ok) throw new Error('HTTP ' + response.status);";
+    html += "      return response.json();";
+    html += "    })";
     html += "    .then(data => {";
     html += "      if (data.valid) {";
     html += "        document.getElementById('temp').textContent = data.temperature_c.toFixed(2);";
@@ -556,15 +683,22 @@ String AquariumWebServer::generateHomePage() {
     html += "        document.getElementById('ph').textContent = data.ph.toFixed(2);";
     html += "        document.getElementById('ec').textContent = data.ec_ms_cm.toFixed(3);";
     html += "      }";
+    html += "      ConnectionState.recordSuccess();";
     html += "    })";
-    html += "    .catch(err => console.error('Update failed:', err))";
+    html += "    .catch(err => {";
+    html += "      console.error('Update failed:', err);";
+    html += "      ConnectionState.recordFailure();";
+    html += "    })";
     html += "    .finally(() => {";
     html += "      document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();";
     html += "    });";
     html += "}\n";
     html += "function updateMqttStatus() {";
     html += "  fetch('/api/mqtt/status')";
-    html += "    .then(response => response.json())";
+    html += "    .then(response => {";
+    html += "      if (!response.ok) throw new Error('HTTP ' + response.status);";
+    html += "      return response.json();";
+    html += "    })";
     html += "    .then(data => {";
     html += "      const statusEl = document.getElementById('mqttStatus');";
     html += "      if (data.connected) {";
@@ -577,11 +711,17 @@ String AquariumWebServer::generateHomePage() {
     html += "        statusEl.textContent = 'Disabled';";
     html += "        statusEl.style.color = 'var(--text-tertiary)';";
     html += "      }";
+    html += "    })";
+    html += "    .catch(err => {";
+    html += "      console.error('MQTT status update failed:', err);";
     html += "    });";
     html += "}\n";
     html += "function updateDerivedMetrics() {";
     html += "  fetch('/api/metrics/derived')";
-    html += "    .then(response => response.json())";
+    html += "    .then(response => {";
+    html += "      if (!response.ok) throw new Error('HTTP ' + response.status);";
+    html += "      return response.json();";
+    html += "    })";
     html += "    .then(data => {";
     html += "      if (data.valid) {";
     html += "        document.getElementById('tds').textContent = parseFloat(data.tds_ppm).toFixed(1);";
@@ -616,12 +756,19 @@ String AquariumWebServer::generateHomePage() {
     html += "          stockCard.style.setProperty('--card-color', '#ef4444');";
     html += "        }";
     html += "      }";
+    html += "      ConnectionState.recordSuccess();";
     html += "    })";
-    html += "    .catch(err => console.error('Derived metrics update failed:', err));";
+    html += "    .catch(err => {";
+    html += "      console.error('Derived metrics update failed:', err);";
+    html += "      ConnectionState.recordFailure();";
+    html += "    });";
     html += "}\n";
     html += "function updateWarningStates() {";
     html += "  fetch('/api/warnings/states')";
-    html += "    .then(response => response.json())";
+    html += "    .then(response => {";
+    html += "      if (!response.ok) throw new Error('HTTP ' + response.status);";
+    html += "      return response.json();";
+    html += "    })";
     html += "    .then(data => {";
     html += "      const warningCount = data.warning_count || 0;";
     html += "      const criticalCount = data.critical_count || 0;";
@@ -648,8 +795,12 @@ String AquariumWebServer::generateHomePage() {
     html += "      updateCardState('orpCard', data.orp, 'ORP');";
     html += "      updateCardState('ecCard', data.conductivity, 'EC');";
     html += "      updateCardState('doCard', data.dissolved_oxygen, 'DO');";
+    html += "      ConnectionState.recordSuccess();";
     html += "    })";
-    html += "    .catch(err => console.error('Warning states update failed:', err));";
+    html += "    .catch(err => {";
+    html += "      console.error('Warning states update failed:', err);";
+    html += "      ConnectionState.recordFailure();";
+    html += "    });";
     html += "}\n";
     html += "function updateCardState(cardId, stateData, metricName) {";
     html += "  const card = document.getElementById(cardId);";
@@ -679,7 +830,8 @@ String AquariumWebServer::generateHomePage() {
     html += "</div></div>";
 
     html += "<div class='status-bar'>";
-    html += "<div class='status-item'><div class='status-dot'></div><span>Connected to: <strong>" + wifiManager->getSSID() + "</strong></span></div>";
+    html += "<div class='status-item'><div class='status-dot' id='statusDot'></div><span id='statusText'>Connected</span></div>";
+    html += "<div class='status-item'><span>WiFi: <strong>" + wifiManager->getSSID() + "</strong></span></div>";
     html += "<div class='status-item'><span>📡 IP: <strong>" + wifiManager->getIPAddress() + "</strong></span></div>";
     html += "<div class='status-item' id='mqttStatusItem'><span id='mqttIndicator'>📊 MQTT: <span id='mqttStatus'>Checking...</span></span></div>";
     html += "<div class='status-item'><span>⏱️ Update: <span id='lastUpdate'>--</span></span></div>";
@@ -816,14 +968,14 @@ String AquariumWebServer::generateHomePage() {
 
     html += "<script>\n";
     html += "initTheme();\n";
-    html += "setInterval(updateData, 2000);\n";
-    html += "setInterval(updateDerivedMetrics, 2000);\n";
-    html += "setInterval(updateMqttStatus, 5000);\n";
-    html += "setInterval(updateWarningStates, 2000);\n";
     html += "updateData();\n";
     html += "updateDerivedMetrics();\n";
     html += "updateMqttStatus();\n";
     html += "updateWarningStates();\n";
+    html += "ConnectionState.dataIntervalId = setInterval(updateData, 2000);\n";
+    html += "ConnectionState.metricsIntervalId = setInterval(updateDerivedMetrics, 2000);\n";
+    html += "ConnectionState.mqttIntervalId = setInterval(updateMqttStatus, 5000);\n";
+    html += "ConnectionState.warningsIntervalId = setInterval(updateWarningStates, 2000);\n";
     html += "</script>";
     html += "</body>";
     html += "</html>";
@@ -1566,7 +1718,7 @@ String AquariumWebServer::generateCalibrationPage() {
     <div class='header'>
         <h1>🔬 Configuration & Calibration</h1>
         <div class='nav'>
-            <a href='/'>Home</a>
+            <a href='/'>Back</a>
             <button onclick='exportCSV()' title='Export data as CSV'>CSV</button>
             <button onclick='exportJSON()' title='Export data as JSON'>JSON</button>
         </div>
@@ -2414,7 +2566,7 @@ String AquariumWebServer::generateCalibrationPage() {
     </div> <!-- End Warnings Tab -->
 
     <div style='text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.85em;'>
-        Scott McLelslie to my beloved wife Kate 2026. Happy new year
+        &copy; Scott McLelslie to my beloved wife Kate 2026. Happy new year
     </div>
 
     <script>
