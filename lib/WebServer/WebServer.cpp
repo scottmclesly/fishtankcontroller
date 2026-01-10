@@ -964,7 +964,7 @@ String AquariumWebServer::generateHomePage() {
 
     html += "</div>";
 
-    html += "<div class='info-footer'>Auto-refresh every 2 seconds | Real-time monitoring active<br>Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
+    html += "<div class='info-footer'>Auto-refresh every 2 seconds | Real-time monitoring active<br>&copy; Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
 
     html += "<script>\n";
     html += "initTheme();\n";
@@ -1712,6 +1712,116 @@ String AquariumWebServer::generateCalibrationPage() {
         .tab-content.active {
             display: block;
         }
+        /* About Modal Styles */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .modal-backdrop:not(.hidden) {
+            display: flex;
+        }
+        .modal-container {
+            background: var(--bg-card);
+            border-radius: 15px;
+            max-width: 700px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        .modal-header {
+            padding: 25px 25px 20px;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            background: var(--bg-card);
+            z-index: 10;
+        }
+        .modal-title {
+            font-size: 1.8em;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+            margin: 0;
+        }
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: transparent;
+            border: none;
+            font-size: 1.8em;
+            cursor: pointer;
+            color: var(--text-secondary);
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .modal-close:hover {
+            background: var(--color-danger);
+            color: white;
+            transform: rotate(90deg);
+        }
+        .modal-content {
+            padding: 25px;
+        }
+        .modal-section {
+            margin-bottom: 25px;
+        }
+        .modal-section h3 {
+            color: var(--color-primary);
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+        .modal-section p, .modal-section ul, .modal-section ol {
+            color: var(--text-primary);
+            line-height: 1.6;
+            margin: 10px 0;
+        }
+        .modal-section ul, .modal-section ol {
+            padding-left: 25px;
+        }
+        .modal-section li {
+            margin: 8px 0;
+        }
+        .modal-section a {
+            color: var(--color-primary);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .modal-section a:hover {
+            border-bottom-color: var(--color-primary);
+        }
+        .modal-section .critical {
+            color: var(--color-danger);
+            font-weight: bold;
+        }
+        .modal-footer {
+            padding: 20px 25px;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
@@ -1719,12 +1829,69 @@ String AquariumWebServer::generateCalibrationPage() {
         <h1>🔬 Configuration & Calibration</h1>
         <div class='nav'>
             <a href='/'>Back</a>
+            <button onclick='showAboutModal()' title='About'>?</button>
             <button onclick='exportCSV()' title='Export data as CSV'>CSV</button>
             <button onclick='exportJSON()' title='Export data as JSON'>JSON</button>
         </div>
     </div>
 
     <div id='messages'></div>
+
+    <!-- About Modal -->
+    <div id='aboutModal' class='modal-backdrop hidden' onclick='if(event.target === this) closeAboutModal()'>
+        <div class='modal-container'>
+            <div class='modal-header'>
+                <h2 class='modal-title'>About Fish Tank Controller</h2>
+                <button class='modal-close' onclick='closeAboutModal()' title='Close'>×</button>
+            </div>
+            <div class='modal-content'>
+                <div class='modal-section'>
+                    <h3>About</h3>
+                    <p>ESP32-based wireless aquarium controller for freshwater/saltwater tanks. Monitors pH, ORP, EC, temperature using the Sentron POET sensor. Features real-time telemetry, data export, MQTT integration with Home Assistant, and web-based calibration.</p>
+                </div>
+
+                <div class='modal-section'>
+                    <h3>Quickstart</h3>
+                    <ol>
+                        <li>Flash firmware to ESP32-C3/S3</li>
+                        <li>Connect to "AquariumSetup" WiFi AP</li>
+                        <li>Configure WiFi credentials</li>
+                        <li>Access <a href='http://aquarium.local' target='_blank' rel='noopener noreferrer'>http://aquarium.local</a></li>
+                        <li>Calibrate pH and EC sensors (Settings → Calibration)</li>
+                    </ol>
+                </div>
+
+                <div class='modal-section'>
+                    <h3>Operations Manual</h3>
+                    <ul>
+                        <li>Dashboard shows real-time sensor readings and derived metrics</li>
+                        <li>Charts page displays historical trends (24-hour history)</li>
+                        <li>Calibration page handles pH (1-point/2-point) and EC calibration</li>
+                        <li>MQTT configuration enables Home Assistant integration</li>
+                        <li>Data export available in CSV/JSON formats</li>
+                        <li>Theme toggle for dark/light modes</li>
+                        <li class='critical'>CRITICAL: Always calibrate sensors before relying on readings</li>
+                        <li class='critical'>CRITICAL: This device manages life-support equipment - monitor regularly</li>
+                    </ul>
+                </div>
+
+                <div class='modal-section'>
+                    <h3>Licensing</h3>
+                    <p>This project is licensed under the <strong>Apache License 2.0</strong>. You are free to use, modify, distribute, and use commercially. Attribution is required. The FishTankController name and branding are protected trademarks. See LICENSE, TRADEMARK.md, and COMMERCIAL.md in the repository for full details.</p>
+                </div>
+
+                <div class='modal-section'>
+                    <h3>Copyright & Project</h3>
+                    <p>© 2026 <a href='https://www.mcleslie.com/' target='_blank' rel='noopener noreferrer'>Scott McLelslie</a></p>
+                    <p>Project: <a href='https://github.com/scottmclesly/fishtankcontroller' target='_blank' rel='noopener noreferrer'>fishtankcontroller on GitHub</a></p>
+                </div>
+
+                <div class='modal-section'>
+                    <p style='text-align: center; font-style: italic;'>Dedicated with love to <a href='https://www.katrinbarshe.com/' target='_blank' rel='noopener noreferrer'>Katrin Barshe</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Tab Navigation -->
     <div class='tabs'>
@@ -2804,6 +2971,29 @@ String AquariumWebServer::generateCalibrationPage() {
                 })
                 .catch(err => showMessage('Error clearing fish', 'error'));
         }
+
+        // About Modal Functions
+        function showAboutModal() {
+            const modal = document.getElementById('aboutModal');
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; // Prevent background scrolling
+        }
+
+        function closeAboutModal() {
+            const modal = document.getElementById('aboutModal');
+            modal.classList.add('hidden');
+            document.body.style.overflow = ''; // Restore scrolling
+        }
+
+        // ESC key to close modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('aboutModal');
+                if (!modal.classList.contains('hidden')) {
+                    closeAboutModal();
+                }
+            }
+        });
     </script>
 </body>
 </html>

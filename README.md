@@ -5,7 +5,7 @@
 [![Status](https://img.shields.io/badge/status-working%20prototype-green)]()
 [![Platform](https://img.shields.io/badge/platform-ESP32-blue)]()
 [![Framework](https://img.shields.io/badge/framework-Arduino-00979D)]()
-[![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-orange)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 Wireless aquarium controller (freshwater/saltwater) built around the **Sentron POET pH/ORP/EC/Temperature I2C sensor** with web interface, MQTT integration, and Home Assistant support.
 
@@ -202,8 +202,8 @@ See [Development Guide](docs/DEVELOPMENT.md) for full roadmap.
 
 - `sensor.aquarium_tds` - Total Dissolved Solids (ppm)
 - `sensor.aquarium_co2` - Dissolved CO₂ (ppm)
-- `sensor.aquarium_nh3_ratio` - Toxic Ammonia Ratio (%)
-- `sensor.aquarium_nh3_ppm` - Toxic Ammonia (ppm)
+- `sensor.aquarium_nh3_fraction_percent` - Toxic Ammonia Fraction (%)
+- `sensor.aquarium_nh3_ppm` - Toxic Ammonia Concentration (ppm)
 - `sensor.aquarium_max_do` - Max Dissolved Oxygen (mg/L)
 - `sensor.aquarium_stocking` - Stocking Density (cm/L)
 
@@ -243,22 +243,31 @@ Contributions welcome! Please read the [Development Guide](docs/DEVELOPMENT.md) 
 
 ## 📄 License
 
-This project is licensed under **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)**.
+This project is licensed under the **Apache License 2.0**.
 
-**You are free to:**
+**What this means:**
 
-- Share and redistribute the material
-- Adapt, remix, and build upon the material
+- **Use freely** - Use for personal, educational, or commercial purposes
+- **Modify** - Create derivative works and modifications
+- **Distribute** - Share and redistribute the software
+- **Patent grant** - Explicit patent license from contributors
+- **No trademark grant** - Brand/name usage requires permission (see below)
 
-**Under these terms:**
+**Requirements:**
 
-- **Attribution** - Give appropriate credit and indicate changes
-- **NonCommercial** - No commercial use without written permission
-- **ShareAlike** - Derivatives must use the same license
+- **Attribution** - Include copyright notice and license
+- **State changes** - Document modifications you make
+- **Include license** - Provide LICENSE and NOTICE files with distributions
 
-**Commercial Use:** Requires explicit written permission from the copyright holder. Contact the project maintainer for commercial licensing inquiries.
+**Trademark and Commercial Use:**
 
-See [LICENSE](LICENSE) file for full terms.
+- The FishTankController name and branding are protected trademarks
+- See [TRADEMARK.md](TRADEMARK.md) for branding guidelines
+- See [COMMERCIAL.md](COMMERCIAL.md) for commercial use guidance and partnership opportunities
+
+**Copyright 2026 Scott McLelsie**
+
+See [LICENSE](LICENSE) file for complete terms.
 
 ---
 

@@ -244,7 +244,7 @@ const char CHARTS_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 </head>
 <body>
     <div class='header'>
-        <h1>📊 Kate's Aquarium #7 Analytics</h1>
+        <h1>🐠 Kate's Aquarium #7 Analytics</h1>
         <div class='nav'>
             <button class='toggle-btn active' onclick='switchView("all")' id='btnAll'>📊 All Metrics</button>
             <button class='toggle-btn' onclick='switchView("primary")' id='btnPrimary'>🔬 Primary Sensors</button>

@@ -388,14 +388,15 @@ This controller may manage equipment supporting living organisms:
 
 ## License
 
-**Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)**
+**Apache License 2.0**
 
 See [LICENSE](../LICENSE) for full terms.
 
 **Key Points:**
-- ✅ Free for personal, educational, and non-commercial use
-- ✅ Modifications and derivatives allowed (must share under same license)
+- ✅ Free for personal, educational, and commercial use
+- ✅ Modifications and derivatives allowed
 - ✅ Attribution required
-- ❌ Commercial use requires written permission
+- ✅ Patent grant included
+- ⚠️ Trademark usage restricted (see [TRADEMARK.md](../TRADEMARK.md))
 
-**Commercial Licensing:** Contact the project maintainer for commercial use inquiries.
+**Commercial Use:** Permitted under Apache 2.0. See [COMMERCIAL.md](../COMMERCIAL.md) for guidance and partnership opportunities.
