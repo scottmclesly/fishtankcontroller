@@ -9,7 +9,7 @@
 
 Wireless aquarium controller (freshwater/saltwater) built around the **Sentron POET pH/ORP/EC/Temperature I2C sensor** with web interface, MQTT integration, and Home Assistant support.
 
-![Dashboard Preview](docs/images/dashboard.png)
+![Dashboard Preview](docs/Screen_Shot.png)
 *Web interface showing live sensor readings and derived water quality metrics*
 
 ---

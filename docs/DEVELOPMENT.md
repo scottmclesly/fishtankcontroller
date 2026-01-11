@@ -121,8 +121,6 @@ The system operates fully offline without cloud dependencies:
 
 **Response:** Variable-length reply of 32-bit little-endian signed integers
 
-**Full protocol:** See [docs/Sonetron ConeFET I2C protocol.pdf](Sonetron%20ConeFET%20I2C%20protocol.pdf)
-
 ## Project Status
 
 ### ✅ Completed Features

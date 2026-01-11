@@ -305,7 +305,6 @@ EC_mS_cm = (K / R) × 1000.0
 
 ## References
 
-- **POET Sensor Documentation:** `docs/Sonetron ConeFET I2C protocol.pdf`
 - **Nernst Equation:** Theoretical basis for pH electrode response
 - **Conductivity Theory:** 4-electrode Kelvin measurement principles
 - **ESP32 Preferences Library:** Non-volatile storage implementation

@@ -10,7 +10,6 @@ The Fish Tank Controller is built around the **Sentron POET pH/ORP/EC/Temperatur
 - **Measurements:** pH, ORP (Oxidation-Reduction Potential), EC (Electrical Conductivity), Temperature
 - **Interface:** I2C
 - **Address:** 0x1F (7-bit)
-- **Documentation:** See [Sonetron ConeFET I2C protocol.pdf](Sonetron%20ConeFET%20I2C%20protocol.pdf)
 
 ### Microcontroller: ESP32 Family
 
@@ -65,8 +64,6 @@ SCL           -->    GPIO SCL (with 4.7kΩ pull-up to 3.3V)
 3. Read returns variable-length reply of 32-bit little-endian signed integers
 
 **Example:** To read all sensors, send command byte `0x0F` (binary: 00001111)
-
-For complete protocol details, see [docs/Sonetron ConeFET I2C protocol.pdf](Sonetron%20ConeFET%20I2C%20protocol.pdf)
 
 ## Planned Additions
 

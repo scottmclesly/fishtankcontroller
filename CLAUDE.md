@@ -79,8 +79,6 @@ The firmware will be responsible for:
    - bit4-7: reserved (must be 0)
 3. Read returns variable-length reply of 32-bit little-endian signed integers
 
-Full protocol details: [docs/Sonetron ConeFET I2C protocol.pdf](docs/Sonetron%20ConeFET%20I2C%20protocol.pdf)
-
 ## Project Structure
 
 ```
@@ -219,7 +217,6 @@ The project documentation has been reorganized for better readability:
 - [docs/MQTT.md](docs/MQTT.md) - MQTT setup, topics, Home Assistant integration
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Build system, architecture, roadmap, contributing
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues and solutions
-- [docs/Sonetron ConeFET I2C protocol.pdf](docs/Sonetron%20ConeFET%20I2C%20protocol.pdf) - POET sensor protocol specification
 
 ### When Working on Documentation
 - Main README should remain concise - detailed info goes in specific docs

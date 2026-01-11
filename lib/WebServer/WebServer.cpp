@@ -1090,7 +1090,7 @@ String AquariumWebServer::generateProvisioningPage() {
 
     html += "<div class='info'>After connecting to WiFi, access at http://aquarium.local</div>";
     html += "<div class='info'>Current AP: " + String(WIFI_AP_SSID) + " | IP: 192.168.4.1</div>";
-    html += "<div class='info' style='margin-top: 20px;'>Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
+    html += "<div class='info' style='margin-top: 20px;'>&copy; Scott McLelslie to my beloved wife Kate 2026. Happy new year</div>";
 
     html += "</body>";
     html += "</html>";
