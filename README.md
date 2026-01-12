@@ -111,6 +111,7 @@ On first boot, device creates AP:
 
 ### Reference
 
+- **[Calculations Guide](docs/CALCULATIONS.md)** - Derived metrics formulas and methodologies
 - **[Development Guide](docs/DEVELOPMENT.md)** - Build system, architecture, roadmap, contributing
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 

@@ -213,6 +213,7 @@ The project documentation has been reorganized for better readability:
 - [docs/HARDWARE.md](docs/HARDWARE.md) - Hardware setup, wiring, POET sensor details
 - [docs/WEB_UI.md](docs/WEB_UI.md) - Web interface features, pages, API endpoints
 - [docs/CALIBRATION.md](docs/CALIBRATION.md) - pH and EC sensor calibration procedures
+- [docs/CALCULATIONS.md](docs/CALCULATIONS.md) - Derived metrics formulas and methodologies
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Tank settings, fish profiles, system configuration
 - [docs/MQTT.md](docs/MQTT.md) - MQTT setup, topics, Home Assistant integration
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Build system, architecture, roadmap, contributing
