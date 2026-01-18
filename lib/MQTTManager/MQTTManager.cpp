@@ -28,6 +28,7 @@ MQTTManager::MQTTManager()
     config.publish_interval_ms = 5000;  // Default 5 seconds
     config.discovery_enabled = false;
     config.timestamp = 0;
+    strncpy(config.chip_id, "", sizeof(config.chip_id));
 }
 
 MQTTManager::~MQTTManager() {
@@ -41,6 +42,9 @@ MQTTManager::~MQTTManager() {
 
 bool MQTTManager::begin() {
     Serial.println("[MQTT] Initializing MQTT Manager...");
+
+    // Generate unique chip ID from MAC address
+    generateChipId();
 
     // Load configuration from NVS
     loadMQTTConfig();
@@ -185,8 +189,11 @@ bool MQTTManager::connect() {
         return false;
     }
 
-    Serial.printf("[MQTT] Connecting to broker %s:%d...\n",
-                  config.broker_host, config.broker_port);
+    // Use topic device ID as MQTT client ID (includes chip ID for uniqueness)
+    String clientId = getTopicDeviceId();
+
+    Serial.printf("[MQTT] Connecting to broker %s:%d as '%s'...\n",
+                  config.broker_host, config.broker_port, clientId.c_str());
 
     mqttClient->setServer(config.broker_host, config.broker_port);
 
@@ -194,9 +201,9 @@ bool MQTTManager::connect() {
 
     // Connect with or without authentication
     if (strlen(config.username) > 0 && strlen(config.password) > 0) {
-        connected = mqttClient->connect(config.device_id, config.username, config.password);
+        connected = mqttClient->connect(clientId.c_str(), config.username, config.password);
     } else {
-        connected = mqttClient->connect(config.device_id);
+        connected = mqttClient->connect(clientId.c_str());
     }
 
     if (connected) {
@@ -394,21 +401,29 @@ bool MQTTManager::publishDiscovery() {
 
     Serial.println("[MQTT] Publishing Home Assistant Discovery messages...");
 
+    // Get device identifiers
+    String topicDeviceId = getTopicDeviceId();  // e.g., "kates_aquarium_7-A1B2C3"
+    String friendlyName = String(config.device_id);  // User's friendly name (e.g., "Kate's Aquarium #7")
+
     // Helper lambda to publish discovery for a sensor
-    auto publishSensor = [this](const char* sensorName, const char* deviceClass,
+    auto publishSensor = [this, &topicDeviceId, &friendlyName](const char* sensorName, const char* deviceClass,
                                  const char* unit, const char* icon) -> bool {
         JsonDocument doc;
 
-        doc["name"] = String(config.device_id) + " " + String(sensorName);
-        doc["unique_id"] = String(config.device_id) + "_" + String(sensorName);
+        // Entity name uses friendly unit name for display
+        doc["name"] = friendlyName + " " + String(sensorName);
+        // Unique ID uses topic device ID (includes chip ID) to guarantee uniqueness
+        doc["unique_id"] = topicDeviceId + "_" + String(sensorName);
         doc["state_topic"] = getTelemetryTopic(sensorName);
         doc["device_class"] = deviceClass;
         doc["unit_of_measurement"] = unit;
         doc["icon"] = icon;
 
         JsonObject device = doc["device"].to<JsonObject>();
-        device["identifiers"][0] = config.device_id;
-        device["name"] = String(config.device_id);
+        // Device identifier uses topic ID for uniqueness
+        device["identifiers"][0] = topicDeviceId;
+        // Device display name uses friendly name
+        device["name"] = friendlyName;
         device["model"] = "POET Aquarium Controller";
         device["manufacturer"] = "DIY";
 
@@ -447,8 +462,53 @@ String MQTTManager::getLastError() const {
     return lastError;
 }
 
+void MQTTManager::generateChipId() {
+    // Get MAC address and use last 3 bytes (6 hex chars) as unique ID
+    uint64_t mac = ESP.getEfuseMac();
+    snprintf(config.chip_id, sizeof(config.chip_id), "%06X",
+             (uint32_t)(mac & 0xFFFFFF));
+    Serial.printf("[MQTT] Generated chip ID: %s\n", config.chip_id);
+}
+
+String MQTTManager::sanitizeForTopic(const String& name) const {
+    // Convert to lowercase, replace spaces and special chars with underscores
+    // Only allow alphanumeric and underscores for MQTT topic compatibility
+    String result = "";
+    for (size_t i = 0; i < name.length() && result.length() < 24; i++) {
+        char c = name.charAt(i);
+        if (c >= 'A' && c <= 'Z') {
+            result += (char)(c + 32);  // Convert to lowercase
+        } else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+            result += c;
+        } else if (c == ' ' || c == '-' || c == '_') {
+            // Avoid consecutive underscores
+            if (result.length() == 0 || result.charAt(result.length() - 1) != '_') {
+                result += '_';
+            }
+        }
+        // Skip other special characters (apostrophes, #, etc.)
+    }
+    // Remove trailing underscore
+    while (result.length() > 0 && result.charAt(result.length() - 1) == '_') {
+        result = result.substring(0, result.length() - 1);
+    }
+    // Default if empty
+    if (result.length() == 0) {
+        result = "aquarium";
+    }
+    return result;
+}
+
+String MQTTManager::getTopicDeviceId() const {
+    // Format: sanitized_unit_name-CHIPID
+    // Example: "kates_aquarium_7-A1B2C3"
+    // This ensures uniqueness even if users name all units the same
+    String sanitized = sanitizeForTopic(String(config.device_id));
+    return sanitized + "-" + String(config.chip_id);
+}
+
 String MQTTManager::getBaseTopic() const {
-    return String("aquarium/") + config.device_id;
+    return String("aquarium/") + getTopicDeviceId();
 }
 
 String MQTTManager::getTelemetryTopic(const char* sensor) const {
@@ -460,7 +520,7 @@ String MQTTManager::getStateTopic(const char* state) const {
 }
 
 String MQTTManager::getDiscoveryTopic(const char* sensor) const {
-    return String("homeassistant/sensor/") + config.device_id + "/" + sensor + "/config";
+    return String("homeassistant/sensor/") + getTopicDeviceId() + "/" + sensor + "/config";
 }
 
 bool MQTTManager::attemptReconnect() {

@@ -12,10 +12,11 @@ struct MQTTConfiguration {
     uint16_t broker_port;
     char username[32];
     char password[32];
-    char device_id[32];
-    uint16_t publish_interval_ms;  // Publish frequency in milliseconds
-    bool discovery_enabled;        // Home Assistant MQTT Discovery
+    char device_id[32];              // User-assigned unit name (friendly name)
+    uint16_t publish_interval_ms;    // Publish frequency in milliseconds
+    bool discovery_enabled;          // Home Assistant MQTT Discovery
     unsigned long timestamp;
+    char chip_id[7];                 // 6-char hex chip ID + null (derived from MAC, read-only)
 };
 
 struct SensorData {
@@ -89,6 +90,11 @@ private:
     String getTelemetryTopic(const char* sensor) const;
     String getStateTopic(const char* state) const;
     String getDiscoveryTopic(const char* sensor) const;
+
+    // Device ID helpers
+    void generateChipId();                     // Generate chip ID from MAC address
+    String sanitizeForTopic(const String& name) const;  // Sanitize name for MQTT topics
+    String getTopicDeviceId() const;           // Get sanitized device ID for topics
 
     // Reconnection logic
     bool attemptReconnect();

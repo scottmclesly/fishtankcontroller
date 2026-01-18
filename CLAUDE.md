@@ -128,20 +128,24 @@ This controller manages life-support equipment and potentially mains-powered dev
 
 **Status:** FULLY IMPLEMENTED
 
-**Base topic:** `aquarium/<device_id>/...`
+**Base topic:** `aquarium/<unit_name>-<chip_id>/...`
+
+The topic structure combines the user-configured Unit Name (sanitized: lowercase, spaces→underscores) with a unique 6-character hardware Chip ID derived from the ESP32's MAC address. This ensures unique topics even when multiple units have the same name.
+
+**Example:** Unit Name "Kate's Aquarium #7" with chip ID "A1B2C3" → `aquarium/kates_aquarium_7-A1B2C3/...`
 
 **Published topics:**
-- `aquarium/<device_id>/telemetry/temperature` - Temperature in °C (float)
-- `aquarium/<device_id>/telemetry/orp` - ORP in mV (float)
-- `aquarium/<device_id>/telemetry/ph` - pH value (float)
-- `aquarium/<device_id>/telemetry/ec` - EC in mS/cm (float)
-- `aquarium/<device_id>/telemetry/sensors` - Combined JSON payload (all sensors)
+- `aquarium/<unit>-<id>/telemetry/temperature` - Temperature in °C (float)
+- `aquarium/<unit>-<id>/telemetry/orp` - ORP in mV (float)
+- `aquarium/<unit>-<id>/telemetry/ph` - pH value (float)
+- `aquarium/<unit>-<id>/telemetry/ec` - EC in mS/cm (float)
+- `aquarium/<unit>-<id>/telemetry/sensors` - Combined JSON payload (all sensors)
 
 **Home Assistant Discovery topics:**
-- `homeassistant/sensor/<device_id>/temperature/config`
-- `homeassistant/sensor/<device_id>/orp/config`
-- `homeassistant/sensor/<device_id>/ph/config`
-- `homeassistant/sensor/<device_id>/ec/config`
+- `homeassistant/sensor/<unit>-<id>/temperature/config`
+- `homeassistant/sensor/<unit>-<id>/orp/config`
+- `homeassistant/sensor/<unit>-<id>/ph/config`
+- `homeassistant/sensor/<unit>-<id>/ec/config`
 
 **Implementation details:**
 - Location: `lib/MQTTManager/` (MQTTManager.h/cpp)
