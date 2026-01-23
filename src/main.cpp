@@ -8,6 +8,7 @@
 #include "TankSettingsManager.h"
 #include "WarningManager.h"
 #include "DerivedMetrics.h"
+#include "DisplayManager.h"
 
 // POET Sensor I2C Configuration
 #define POET_I2C_ADDR 0x1F
@@ -44,6 +45,7 @@ CalibrationManager calibrationManager;
 MQTTManager mqttManager;
 TankSettingsManager tankSettingsManager;
 WarningManager warningManager;
+DisplayManager displayManager;
 AquariumWebServer* webServer = nullptr;
 
 // Timing for non-blocking sensor reads
@@ -143,6 +145,11 @@ void setup() {
     Serial.println("POET sensor initialized successfully!");
   }
 
+  // Initialize OLED Display (shares I2C bus with POET sensor)
+  if (!displayManager.begin()) {
+    Serial.println("WARNING: OLED display not detected - continuing without display");
+  }
+
   Serial.println();
 }
 
@@ -157,6 +164,9 @@ void loop() {
 
   // Handle MQTT connection and publishing
   mqttManager.loop();
+
+  // Handle OLED display metric cycling
+  displayManager.loop();
 
   // Non-blocking sensor reading - only read every SENSOR_READ_INTERVAL milliseconds
   unsigned long currentMillis = millis();
@@ -212,6 +222,9 @@ void loop() {
       } else {
         Serial.println(" mS/cm (calibrated)");
       }
+
+      // Update OLED display with sensor data
+      displayManager.updateSensorData(temp_C, orp_mV, pH, ec_mS_cm, result.valid);
 
       // Calculate derived metrics
       TankSettings& settings = tankSettingsManager.getSettings();
