@@ -1,0 +1,7 @@
+## IDF Component Manager Manifest File
+dependencies:
+  # mDNS for network discovery (aquarium.local)
+  espressif/mdns: "*"
+
+  # LittleFS filesystem for web assets
+  joltwallet/littlefs: "*"

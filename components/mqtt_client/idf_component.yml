@@ -1,0 +1,5 @@
+## IDF Component Manager Manifest File
+## Note: ESP-IDF 5.x includes mqtt as a built-in component
+dependencies:
+  idf:
+    version: ">=5.0.0"

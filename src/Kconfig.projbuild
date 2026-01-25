@@ -1,0 +1,105 @@
+menu "Fishtank Controller Configuration"
+
+    config FISHTANK_UNIT_NAME
+        string "Default unit name"
+        default "Aquarium"
+        help
+            Default device name used for mDNS and MQTT topics.
+            Can be changed at runtime via web UI.
+
+    menu "I2C Configuration"
+        config FISHTANK_I2C_SDA_GPIO
+            int "I2C SDA GPIO"
+            default 6
+            help
+                GPIO number for I2C data line.
+
+        config FISHTANK_I2C_SCL_GPIO
+            int "I2C SCL GPIO"
+            default 7
+            help
+                GPIO number for I2C clock line.
+
+        config FISHTANK_I2C_FREQ_HZ
+            int "I2C frequency (Hz)"
+            default 400000
+            help
+                I2C bus frequency. POET sensor supports up to 400kHz.
+    endmenu
+
+    menu "POET Sensor Configuration"
+        config FISHTANK_POET_I2C_ADDR
+            hex "POET sensor I2C address"
+            default 0x1F
+            help
+                I2C address of the POET pH/ORP/EC/Temperature sensor.
+
+        config FISHTANK_SENSOR_READ_INTERVAL_MS
+            int "Sensor read interval (ms)"
+            default 5000
+            help
+                Interval between sensor readings in milliseconds.
+    endmenu
+
+    menu "Display Configuration"
+        config FISHTANK_DISPLAY_I2C_ADDR
+            hex "SSD1306 display I2C address"
+            default 0x3C
+            help
+                I2C address of the SSD1306 OLED display.
+                Common values: 0x3C or 0x3D.
+
+        config FISHTANK_DISPLAY_WIDTH
+            int "Display width (pixels)"
+            default 128
+
+        config FISHTANK_DISPLAY_HEIGHT
+            int "Display height (pixels)"
+            default 32
+
+        config FISHTANK_DISPLAY_CYCLE_MS
+            int "Display metric cycle interval (ms)"
+            default 3000
+            help
+                Time to display each metric before cycling to next.
+    endmenu
+
+    menu "WiFi Provisioning"
+        config FISHTANK_WIFI_AP_SSID
+            string "Provisioning AP SSID"
+            default "AquariumSetup"
+            help
+                SSID for WiFi provisioning access point.
+
+        config FISHTANK_WIFI_AP_PASS
+            string "Provisioning AP password"
+            default "aquarium123"
+            help
+                Password for WiFi provisioning access point.
+                Must be at least 8 characters.
+    endmenu
+
+    menu "MQTT Configuration"
+        config FISHTANK_MQTT_BUFFER_SIZE
+            int "MQTT buffer size"
+            default 1024
+            help
+                Size of MQTT send/receive buffers.
+
+        config FISHTANK_MQTT_RECONNECT_TIMEOUT_MS
+            int "MQTT reconnect timeout (ms)"
+            default 5000
+            help
+                Initial reconnection timeout. Uses exponential backoff.
+    endmenu
+
+    menu "OTA Configuration"
+        config FISHTANK_OTA_ROLLBACK_TIMEOUT_S
+            int "OTA rollback timeout (seconds)"
+            default 300
+            help
+                Time after boot to confirm OTA update before automatic rollback.
+                Set to 0 to disable automatic rollback.
+    endmenu
+
+endmenu

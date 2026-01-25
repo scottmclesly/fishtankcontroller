@@ -1,0 +1,23 @@
+idf_component_register(
+    SRCS
+        "http_server.c"
+        "handlers/sensor_handlers.c"
+        "handlers/calibration_handlers.c"
+        "handlers/mqtt_handlers.c"
+        "handlers/settings_handlers.c"
+        "handlers/ota_handlers.c"
+        "handlers/websocket_handler.c"
+    INCLUDE_DIRS "include"
+    REQUIRES
+        esp_http_server
+        json
+        calibration
+        mqtt_client
+        tank_settings
+        warning_manager
+        wifi_manager
+        esp_timer
+        app_update
+        ota_manager
+        freertos
+)
