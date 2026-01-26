@@ -3,8 +3,8 @@
 > **ESP32-based wireless aquarium controller for comprehensive water quality monitoring and control**
 
 [![Status](https://img.shields.io/badge/status-working%20prototype-green)]()
-[![Platform](https://img.shields.io/badge/platform-ESP32-blue)]()
-[![Framework](https://img.shields.io/badge/framework-Arduino-00979D)]()
+[![Platform](https://img.shields.io/badge/platform-ESP32--C6-blue)]()
+[![Framework](https://img.shields.io/badge/framework-ESP--IDF%205.5-red)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 Wireless aquarium controller (freshwater/saltwater) built around the **Sentron POET pH/ORP/EC/Temperature I2C sensor** with web interface, MQTT integration, and Home Assistant support.
@@ -14,16 +14,16 @@ Wireless aquarium controller (freshwater/saltwater) built around the **Sentron P
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-### 🔬 Comprehensive Water Quality Monitoring
+### Comprehensive Water Quality Monitoring
 
 - **Primary Sensors:** Temperature, pH, ORP (Oxidation-Reduction Potential), EC (Electrical Conductivity)
-- **Derived Metrics:** TDS, Dissolved CO₂, Toxic Ammonia (NH₃), Max Dissolved Oxygen, Stocking Density
+- **Derived Metrics:** TDS, Dissolved CO2, Toxic Ammonia (NH3), Max Dissolved Oxygen, Stocking Density
 - **Real-time Updates:** Auto-refreshing dashboard with 5-second intervals
 - **Historical Data:** 24 minutes of history with Chart.js visualization
 
-### 🌐 Web Interface
+### Web Interface
 
 - **Responsive Design:** Works on desktop, tablet, and mobile
 - **Live Dashboard:** Real-time sensor readings with status indicators
@@ -32,7 +32,7 @@ Wireless aquarium controller (freshwater/saltwater) built around the **Sentron P
 - **Dark/Light Themes:** User preference persists across sessions
 - **Data Export:** CSV and JSON export for analysis
 
-### 🏠 Home Automation Integration
+### Home Automation Integration
 
 - **MQTT Publishing:** Individual sensor topics + combined JSON payload
 - **Home Assistant Discovery:** Automatic entity creation
@@ -40,28 +40,29 @@ Wireless aquarium controller (freshwater/saltwater) built around the **Sentron P
 - **Configurable:** Broker, auth, publish interval via web UI
 - **Derived Metrics:** All calculated metrics published to MQTT
 
-### 🛠️ Easy Setup
+### Easy Setup
 
 - **WiFi Provisioning:** Captive portal for easy WiFi setup
 - **mDNS Support:** Access via `http://aquarium.local`
-- **Persistent Storage:** Configuration survives reboots
+- **Persistent Storage:** Configuration survives reboots (NVS)
 - **No Cloud Required:** Works completely offline
 
-### 🎯 Advanced Features
+### Advanced Features
 
+- **OTA Updates:** Over-the-air firmware updates with rollback protection
 - **Sensor Calibration:** pH (1-point/2-point) and EC (cell constant) calibration
 - **Tank Configuration:** Shape, volume, water chemistry parameters
 - **Fish Stocking Tracker:** Manage fish profiles with automatic density calculation
-- **Console Interface:** Serial commands for debugging and data export
+- **Memory Monitoring:** Built-in heap tracking for stability profiling
 - **Failsafe Ready:** Designed for future relay/driver control with safety interlocks
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Hardware Requirements
 
-- **ESP32 board** (ESP32-C3, ESP32-S3, or compatible)
+- **ESP32 board** (ESP32-C6 primary, ESP32-C3 compatible)
 - **Sentron POET sensor** (pH/ORP/EC/Temperature I2C)
 - **USB cable** for programming
 - **WiFi network** (2.4GHz)
@@ -73,7 +74,13 @@ Wireless aquarium controller (freshwater/saltwater) built around the **Sentron P
 git clone https://github.com/yourusername/fishtankcontroller.git
 cd fishtankcontroller
 
-# Build and upload
+# Build (defaults to ESP32-C6)
+pio run
+
+# Build for ESP32-C3
+pio run -e seeed_xiao_esp32c3
+
+# Upload to device
 pio run -t upload
 
 # Monitor serial output
@@ -95,7 +102,19 @@ On first boot, device creates AP:
 
 ---
 
-## 📚 Documentation
+## Build Targets
+
+| Command | Target Board |
+|---------|--------------|
+| `pio run` | ESP32-C6 (default) |
+| `pio run -e seeed_xiao_esp32c6` | ESP32-C6 (explicit) |
+| `pio run -e seeed_xiao_esp32c3` | ESP32-C3 |
+| `pio test -e native` | Run unit tests (host) |
+| `pio test -e esp32c6_test` | Run embedded tests |
+
+---
+
+## Documentation
 
 ### Getting Started
 
@@ -112,47 +131,50 @@ On first boot, device creates AP:
 ### Reference
 
 - **[Calculations Guide](docs/CALCULATIONS.md)** - Derived metrics formulas and methodologies
+- **[Testing Guide](docs/TESTING.md)** - Unit tests, embedded tests, memory profiling
 - **[Development Guide](docs/DEVELOPMENT.md)** - Build system, architecture, roadmap, contributing
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 
 ---
 
-## 🎯 Current Status
+## Current Status
 
-### ✅ Working Features
+### Working Features
 
 **Core Infrastructure:**
 
-- ✅ ESP32-C3/S3 support with Arduino framework
-- ✅ WiFi connection with AP provisioning
-- ✅ POET I2C sensor driver (full protocol)
-- ✅ mDNS responder
+- ESP32-C6/C3 support with ESP-IDF 5.5 framework
+- WiFi connection with AP provisioning
+- POET I2C sensor driver (full protocol)
+- mDNS responder and SNTP time sync
+- OTA firmware updates with rollback protection
 
 **Monitoring:**
 
-- ✅ Real-time sensor readings (temp, ORP, pH, EC)
-- ✅ Derived metrics (TDS, CO₂, NH₃, DO, stocking)
-- ✅ 288-point historical data buffer (24 minutes)
-- ✅ CSV/JSON export via web UI and console
+- Real-time sensor readings (temp, ORP, pH, EC)
+- Derived metrics (TDS, CO2, NH3, DO, stocking)
+- 288-point historical data buffer
+- CSV/JSON export via web UI
+- Memory usage monitoring
 
 **User Interface:**
 
-- ✅ Live dashboard with auto-refresh
-- ✅ Historical charts with Chart.js
-- ✅ Calibration interface (pH, EC)
-- ✅ Tank configuration and fish profiles
-- ✅ Dark/light theme toggle
-- ✅ Responsive mobile design
+- Live dashboard with auto-refresh
+- Historical charts with Chart.js
+- Calibration interface (pH, EC)
+- Tank configuration and fish profiles
+- Dark/light theme toggle
+- Responsive mobile design
 
 **Integration:**
 
-- ✅ MQTT client with auto-reconnection
-- ✅ Home Assistant MQTT Discovery
-- ✅ Configurable broker via web UI
-- ✅ Real-time connection status
-- ✅ All metrics published to MQTT
+- MQTT client with auto-reconnection
+- Home Assistant MQTT Discovery
+- Configurable broker via web UI
+- Real-time connection status
+- All metrics published to MQTT
 
-### 🚧 Planned Features
+### Planned Features
 
 - [ ] WebSocket live updates (currently HTTP polling)
 - [ ] Output control (relays/drivers) with failsafes
@@ -161,40 +183,39 @@ On first boot, device creates AP:
 - [ ] Long-term data logging (flash/SD/cloud)
 - [ ] Flutter cross-platform app
 - [ ] TLS/SSL for secure MQTT
-- [ ] OTA firmware updates
 
 See [Development Guide](docs/DEVELOPMENT.md) for full roadmap.
 
 ---
 
-## 🔬 Sensor Capabilities
+## Sensor Capabilities
 
 ### Primary Measurements
 
 | Sensor | Range | Accuracy | Notes |
 |--------|-------|----------|-------|
-| **Temperature** | 0-100°C | ±0.5°C | No calibration required |
-| **pH** | 0-14 | ±0.1 pH | Requires 1-point or 2-point calibration |
-| **ORP** | -1000 to +1000 mV | ±5 mV | Reference electrode dependent |
-| **EC** | 0-200 mS/cm | ±2% | Requires cell constant calibration |
+| **Temperature** | 0-100C | +/-0.5C | No calibration required |
+| **pH** | 0-14 | +/-0.1 pH | Requires 1-point or 2-point calibration |
+| **ORP** | -1000 to +1000 mV | +/-5 mV | Reference electrode dependent |
+| **EC** | 0-200 mS/cm | +/-2% | Requires cell constant calibration |
 
 ### Derived Metrics
 
 - **TDS (Total Dissolved Solids):** Calculated from EC with configurable conversion factor
-- **Dissolved CO₂:** Based on pH and KH (carbonate hardness)
-- **Toxic Ammonia (NH₃):** Temperature and pH dependent calculation
+- **Dissolved CO2:** Based on pH and KH (carbonate hardness)
+- **Toxic Ammonia (NH3):** Temperature and pH dependent calculation
 - **Max Dissolved Oxygen:** Temperature-dependent saturation point
 - **Stocking Density:** Fish length per liter with color-coded warnings
 
 ---
 
-## 🏠 Home Assistant Integration
+## Home Assistant Integration
 
 **Automatic entity creation with MQTT Discovery:**
 
 ### Primary Sensors
 
-- `sensor.aquarium_temperature` - Temperature (°C)
+- `sensor.aquarium_temperature` - Temperature (C)
 - `sensor.aquarium_ph` - pH value
 - `sensor.aquarium_orp` - ORP (mV)
 - `sensor.aquarium_ec` - Electrical Conductivity (mS/cm)
@@ -202,7 +223,7 @@ See [Development Guide](docs/DEVELOPMENT.md) for full roadmap.
 ### Derived Metrics
 
 - `sensor.aquarium_tds` - Total Dissolved Solids (ppm)
-- `sensor.aquarium_co2` - Dissolved CO₂ (ppm)
+- `sensor.aquarium_co2` - Dissolved CO2 (ppm)
 - `sensor.aquarium_nh3_fraction_percent` - Toxic Ammonia Fraction (%)
 - `sensor.aquarium_nh3_ppm` - Toxic Ammonia Concentration (ppm)
 - `sensor.aquarium_max_do` - Max Dissolved Oxygen (mg/L)
@@ -214,35 +235,36 @@ See [MQTT Guide](docs/MQTT.md) for complete setup instructions.
 
 ---
 
-## 🛡️ Safety Considerations
+## Safety Considerations
 
 This controller is designed to support life-support systems for living organisms:
 
-- ⚠️ Define safe default states for all outputs
-- ⚠️ Implement watchdog timers for critical equipment
-- ⚠️ Use proper enclosures, fusing, and isolation for mains-powered devices
-- ⚠️ Consider galvanic isolation between sensor and equipment
-- ⚠️ Test failsafe behavior regularly
-- ⚠️ Follow local electrical codes
+- Define safe default states for all outputs
+- Implement watchdog timers for critical equipment
+- Use proper enclosures, fusing, and isolation for mains-powered devices
+- Consider galvanic isolation between sensor and equipment
+- Test failsafe behavior regularly
+- Follow local electrical codes
 
 See [Hardware Guide](docs/HARDWARE.md) for detailed safety information.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions welcome! Please read the [Development Guide](docs/DEVELOPMENT.md) first.
 
 **Before submitting PR:**
 
 - Test on actual hardware
+- Run tests: `pio test -e native`
 - Follow existing code style
 - Update documentation
 - Include hardware/firmware version in PR description
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **Apache License 2.0**.
 
@@ -272,16 +294,16 @@ See [LICENSE](LICENSE) file for complete terms.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Sentron** for the POET sensor and protocol documentation
-- **ESP32 Community** for Arduino framework and libraries
+- **Espressif** for ESP-IDF framework
 - **Home Assistant Community** for MQTT Discovery standards
 - **Chart.js** for excellent charting library
 
 ---
 
-## 📞 Support
+## Support
 
 - **Issues:** [GitHub Issues](https://github.com/yourusername/fishtankcontroller/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/yourusername/fishtankcontroller/discussions)
@@ -289,4 +311,4 @@ See [LICENSE](LICENSE) file for complete terms.
 
 ---
 
-**Made with ❤️ for aquarium enthusiasts**
+**Made with care for aquarium enthusiasts**

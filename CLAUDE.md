@@ -4,20 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ESP32-based wireless aquarium controller for freshwater/saltwater tanks. Built around the **Sentron POET pH/ORP/EC/Temperature I2C sensor** with planned support for additional sensors and relay/driver outputs for tank equipment.
+ESP32-based wireless aquarium controller for freshwater/saltwater tanks. Built around the **Sentron POET pH/ORP/EC/Temperature I2C sensor** with web interface, MQTT integration, OTA updates, and Home Assistant support.
 
-**Status:** Working prototype - WiFi connectivity, sensor monitoring, web UI, and MQTT operational.
+**Status:** Working prototype - WiFi connectivity, sensor monitoring, web UI, MQTT, and OTA operational.
 
 ## Build System & Commands
 
-### Platform: PlatformIO + Arduino Framework
+### Platform: PlatformIO + ESP-IDF 5.5
 
-Current target: `seeed_xiao_esp32c3` (ESP32-C3 board)
+Primary target: `seeed_xiao_esp32c6` (ESP32-C6 board)
+Secondary target: `seeed_xiao_esp32c3` (ESP32-C3 board)
 
 **Build commands:**
 ```bash
-# Build firmware
+# Build firmware (defaults to ESP32-C6)
 pio run
+
+# Build for specific target
+pio run -e seeed_xiao_esp32c6    # ESP32-C6
+pio run -e seeed_xiao_esp32c3    # ESP32-C3
 
 # Build and upload to device
 pio run -t upload
@@ -31,11 +36,12 @@ pio device monitor
 # Build + upload + monitor (common workflow)
 pio run -t upload && pio device monitor
 
-# Run tests
-pio test
-```
+# Run native tests (on host computer)
+pio test -e native
 
-**Note:** The README recommends **ESP32-S3** as the default MCU choice for production, but current platformio.ini is configured for Seeed XIAO ESP32-C3. Consider updating the board configuration if migrating to S3.
+# Run embedded tests (on device)
+pio test -e esp32c6_test
+```
 
 ## Architecture
 
@@ -43,204 +49,175 @@ pio test
 
 This system is designed to work fully offline without cloud dependencies:
 
-- **Device ↔ UI:** HTTP REST (config/snapshots) + WebSocket (live telemetry)
-- **Device ↔ Home Automation:** MQTT with Home Assistant MQTT Discovery support
-- **On-device Web UI:** Static HTML/JS served from LittleFS/SPIFFS, accessible via mDNS (`http://aquarium.local`)
-- **Flutter UI:** Cross-platform app using same REST/WebSocket API as Web UI
+- **Device <-> UI:** HTTP REST (config/snapshots) + WebSocket (live telemetry)
+- **Device <-> Home Automation:** MQTT with Home Assistant MQTT Discovery support
+- **On-device Web UI:** Static HTML/JS served from LittleFS, accessible via mDNS (`http://aquarium.local`)
 
-### Firmware Architecture (Planned)
+### Firmware Architecture
 
-The firmware will be responsible for:
+The ESP-IDF firmware implements:
 
-1. **Sensor acquisition** - Read POET sensor via I2C (address `0x1F`, up to 400 kHz)
-2. **Data conversion** - Transform raw sensor data to user-facing units (°C, mV, pH, mS/cm)
-3. **Control outputs** - Manage relays/drivers with watchdog/failsafe behavior
-4. **APIs** - Serve REST + WebSocket endpoints for UI communication
-5. **MQTT publishing** - Publish telemetry and handle command topics
-6. **Web UI hosting** - Serve static Web UI from flash filesystem
-7. **Provisioning** - Captive portal AP mode for initial Wi-Fi setup
+1. **Sensor acquisition** - Read POET sensor via I2C (address `0x1F`, 400 kHz)
+2. **Data conversion** - Transform raw sensor data to user-facing units
+3. **Derived metrics** - Calculate TDS, CO2, NH3, DO, stocking density
+4. **Warning system** - Threshold monitoring with hysteresis
+5. **APIs** - HTTP REST endpoints for UI communication
+6. **MQTT publishing** - Publish telemetry with Home Assistant Discovery
+7. **Web UI hosting** - Serve static Web UI from flash filesystem
+8. **Provisioning** - Captive portal AP mode for initial Wi-Fi setup
+9. **OTA updates** - Over-the-air firmware updates with rollback protection
+10. **Display** - SSD1306 OLED driver for local status display
+
+### FreeRTOS Task Structure
+
+```
+sensor_task     - POET sensor reading, calibration, derived metrics (priority 5)
+http_task       - Web server and REST API (priority 4)
+mqtt_task       - MQTT client and publishing (priority 3)
+display_task    - OLED display cycling (priority 2)
+monitor_task    - Heap monitoring and leak detection (priority 1)
+```
 
 ### POET I2C Sensor Protocol
 
 **Critical implementation details:**
 
 - **I2C Address:** `0x1F` (7-bit)
-- **Bus speed:** Up to 400 kHz
-- **Voltage:** 3.3V logic (use level shifting if needed)
+- **Bus speed:** 400 kHz
+- **Voltage:** 3.3V logic
 - **Pull-ups:** External pull-ups recommended
 
 **Measurement protocol:**
-1. Write a command byte to `0x1F` to start measurement
-2. Command bits (LSB → MSB):
-   - bit0: temperature
-   - bit1: ORP
-   - bit2: pH
-   - bit3: EC
-   - bit4-7: reserved (must be 0)
-3. Read returns variable-length reply of 32-bit little-endian signed integers
+1. Write command byte to `0x1F` to start measurement
+2. Command bits (LSB -> MSB): bit0=temp, bit1=ORP, bit2=pH, bit3=EC
+3. Wait ~2.8 seconds for measurement
+4. Read returns variable-length reply of 32-bit little-endian signed integers
 
 ## Project Structure
 
 ```
-/src              - Main firmware source (currently stub Arduino code)
-/lib              - Custom libraries (empty, ready for POET driver, etc.)
-/include          - Header files
-/test             - Unit tests
-/docs             - Documentation (includes POET I2C protocol PDF)
-/platformio.ini   - PlatformIO build configuration
-```
-
-**Planned structure expansion** (from README):
-```
-/firmware         - ESP32 firmware (current root is already firmware)
-/app              - Flutter cross-platform UI (not yet created)
-/web              - Static Web UI files (to be served by MCU)
-/hardware         - Schematics, BOM, enclosure designs
-/scripts          - Build/deployment automation
+/src/main.c           - Application entry point (ESP-IDF convention: in src/)
+/components/          - ESP-IDF components (modular firmware)
+  /poet_sensor/       - POET I2C sensor driver
+  /calibration/       - pH/EC calibration with NVS persistence
+  /warning_manager/   - Threshold monitoring and alerts
+  /derived_metrics/   - TDS, CO2, NH3, DO calculations
+  /tank_settings/     - Tank configuration storage
+  /wifi_manager/      - WiFi connection and AP provisioning
+  /mqtt_manager/      - MQTT client with HA Discovery
+  /http_server/       - Async web server, REST API, WebSocket
+  /display_driver/    - SSD1306 OLED driver
+  /data_history/      - Circular buffer for historical data
+  /ota_manager/       - OTA updates with rollback protection
+/test/                - Unit tests
+  /test_native/       - Native tests (run on host)
+  /test_embedded/     - Embedded tests (run on device)
+/docs/                - Documentation
+/platformio.ini       - PlatformIO build configuration
+/partitions.csv       - Custom partition table with OTA support
+/sdkconfig.defaults   - ESP-IDF SDK configuration
 ```
 
 ## Development Considerations
 
-### Framework Choice
+### ESP-IDF Patterns
 
-- **Current:** Arduino framework (for rapid prototyping)
-- **Recommended for production:** ESP-IDF (better for networking, OTA, long-term robustness)
-- Consider migration path to ESP-IDF when core functionality stabilizes
+- Use `ESP_LOGI/W/E()` for logging (not printf)
+- Use `esp_err_t` return types with `ESP_OK`, `ESP_FAIL`, etc.
+- Store config in NVS (Non-Volatile Storage)
+- Use FreeRTOS primitives (tasks, queues, event groups, mutexes)
+- Components are in `/components/` with CMakeLists.txt
 
 ### Safety & Failsafes
 
-This controller manages life-support equipment and potentially mains-powered devices:
+This controller manages life-support equipment:
 
 - **Always** define safe default states for outputs on boot/reset
 - Implement watchdog behavior for critical outputs
-- Consider galvanic isolation between sensor medium and other equipment
+- Consider galvanic isolation between sensor medium and equipment
 - Use proper enclosures, fusing, and strain relief for mains-powered equipment
 
 ### Calibration Requirements
 
-**pH and EC sensors require calibration for meaningful values:**
+**pH and EC sensors require calibration:**
 
 - **pH:** 1-point (offset) or 2-point (offset + slope) using known buffer solutions
-- **EC:** Cell constant calibration using known conductivity solution with temperature compensation
-- Calibration data must be persisted to flash/EEPROM
+- **EC:** Cell constant calibration using known conductivity solution
+- Calibration data persisted to NVS
 
-### MQTT Implementation ✅
-
-**Status:** FULLY IMPLEMENTED
+### MQTT Implementation
 
 **Base topic:** `aquarium/<unit_name>-<chip_id>/...`
 
-The topic structure combines the user-configured Unit Name (sanitized: lowercase, spaces→underscores) with a unique 6-character hardware Chip ID derived from the ESP32's MAC address. This ensures unique topics even when multiple units have the same name.
-
-**Example:** Unit Name "Kate's Aquarium #7" with chip ID "A1B2C3" → `aquarium/kates_aquarium_7-A1B2C3/...`
-
 **Published topics:**
-- `aquarium/<unit>-<id>/telemetry/temperature` - Temperature in °C (float)
-- `aquarium/<unit>-<id>/telemetry/orp` - ORP in mV (float)
-- `aquarium/<unit>-<id>/telemetry/ph` - pH value (float)
-- `aquarium/<unit>-<id>/telemetry/ec` - EC in mS/cm (float)
-- `aquarium/<unit>-<id>/telemetry/sensors` - Combined JSON payload (all sensors)
+- `aquarium/<unit>-<id>/telemetry/temperature` - Temperature in C
+- `aquarium/<unit>-<id>/telemetry/orp` - ORP in mV
+- `aquarium/<unit>-<id>/telemetry/ph` - pH value
+- `aquarium/<unit>-<id>/telemetry/ec` - EC in mS/cm
+- `aquarium/<unit>-<id>/telemetry/sensors` - Combined JSON payload
 
-**Home Assistant Discovery topics:**
-- `homeassistant/sensor/<unit>-<id>/temperature/config`
-- `homeassistant/sensor/<unit>-<id>/orp/config`
-- `homeassistant/sensor/<unit>-<id>/ph/config`
-- `homeassistant/sensor/<unit>-<id>/ec/config`
-
-**Implementation details:**
-- Location: `lib/MQTTManager/` (MQTTManager.h/cpp)
-- Library: PubSubClient v2.8
-- Configuration storage: ESP32 NVS (persistent)
-- Features:
-  - Configurable broker host/port
-  - Username/password authentication
-  - Configurable device ID and publish intervals
-  - Home Assistant MQTT Discovery
-  - Automatic reconnection (5-second retry interval)
-  - Web-based configuration interface
-  - Real-time connection status monitoring
-
-**Combined telemetry payload example:**
-```json
-{
-  "temperature_c": 25.5,
-  "orp_mv": 350.2,
-  "ph": 7.8,
-  "ec_ms_cm": 1.234,
-  "valid": true,
-  "timestamp": 123456789
-}
-```
-
-**Configuration via Web UI:**
-Navigate to `http://aquarium.local/calibration` → MQTT Configuration section
+**Home Assistant Discovery:** Auto-registers entities at `homeassistant/sensor/<unit>-<id>/*/config`
 
 ## Current Implementation Status
 
-### ✅ Completed Features
+### Completed Features
 
-1. ✅ **MCU + firmware framework** - ESP32-C3 with Arduino framework
-2. ✅ **POET driver** - Full I2C communication with raw reads (address 0x1F, 400kHz)
-3. ✅ **WiFi stack** - Connection management, NVS credential storage, AP provisioning mode
-4. ✅ **REST API** - Comprehensive endpoints for sensors, history, calibration, export, MQTT config
-5. ✅ **Web UI** - Dashboard, Charts, Calibration pages with dark/light themes
-6. ✅ **Data history** - 288-point circular buffer with 5-second intervals
-7. ✅ **Data export** - CSV and JSON export via web UI and console commands
-8. ✅ **Calibration system** - pH (1-point/2-point) and EC (cell constant) with NVS persistence
-9. ✅ **MQTT publisher** - Full implementation with broker configuration
-10. ✅ **MQTT telemetry** - Individual sensor topics + combined JSON payload
-11. ✅ **Home Assistant MQTT Discovery** - Automatic entity registration
-12. ✅ **MQTT configuration UI** - Web-based setup with connection testing
-13. ✅ **Status monitoring** - Real-time MQTT connection indicators on all pages
-14. ✅ **Console interface** - Serial commands for debugging and data export
+1. **MCU + firmware framework** - ESP32-C6/C3 with ESP-IDF 5.5
+2. **POET driver** - Full I2C communication (address 0x1F, 400kHz)
+3. **WiFi stack** - Connection management, NVS credentials, AP provisioning
+4. **REST API** - Endpoints for sensors, history, calibration, export, settings
+5. **Web UI** - Dashboard, Charts, Calibration pages with dark/light themes
+6. **Data history** - 288-point circular buffer with statistics
+7. **Data export** - CSV and JSON export
+8. **Calibration system** - pH (1-point/2-point) and EC with NVS persistence
+9. **MQTT publisher** - Full implementation with broker configuration
+10. **Home Assistant Discovery** - Automatic entity registration
+11. **OTA updates** - HTTP download, direct upload, rollback protection
+12. **Display driver** - SSD1306 OLED with metric cycling
+13. **Memory monitoring** - Heap tracking with leak detection
+14. **Unit tests** - Native tests for calculations, embedded tests for components
 
-### 🚧 Planned Features
+### Planned Features
 
 - WebSocket live feed (currently using HTTP polling)
-- Flutter dashboard MVP
 - Output control with failsafes
 - Scheduled automation and rules engine
 - Long-term logging (flash/SD/remote)
 - TLS/SSL for secure MQTT
-- OTA firmware updates
 
-## Documentation Structure
-
-The project documentation has been reorganized for better readability:
-
-### Main Documentation
-- [README.md](README.md) - Condensed overview with quick start and key features
-- [CLAUDE.md](CLAUDE.md) - This file - development context for AI assistants
-
-### Detailed Guides (docs/ folder)
-- [docs/INSTALLATION.md](docs/INSTALLATION.md) - Flash firmware, WiFi provisioning, first boot
-- [docs/HARDWARE.md](docs/HARDWARE.md) - Hardware setup, wiring, POET sensor details
-- [docs/WEB_UI.md](docs/WEB_UI.md) - Web interface features, pages, API endpoints
-- [docs/CALIBRATION.md](docs/CALIBRATION.md) - pH and EC sensor calibration procedures
-- [docs/CALCULATIONS.md](docs/CALCULATIONS.md) - Derived metrics formulas and methodologies
-- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Tank settings, fish profiles, system configuration
-- [docs/MQTT.md](docs/MQTT.md) - MQTT setup, topics, Home Assistant integration
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Build system, architecture, roadmap, contributing
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues and solutions
-
-### When Working on Documentation
-- Main README should remain concise - detailed info goes in specific docs
-- Keep specialized guides focused on their topics
-- Update relevant docs/ files when adding features
-- Cross-reference between docs using markdown links
+## Key Files
 
 ### Build Configuration
-- [platformio.ini](platformio.ini) - PlatformIO build config (ESP32-C3, libraries)
+- [platformio.ini](platformio.ini) - PlatformIO config (ESP32-C6/C3, ESP-IDF)
+- [partitions.csv](partitions.csv) - Partition table with OTA support
+- [sdkconfig.defaults](sdkconfig.defaults) - ESP-IDF SDK defaults
 
 ### Firmware Core
-- [src/main.cpp](src/main.cpp) - Main firmware entry point, sensor loop, MQTT integration
+- [src/main.c](src/main.c) - Application entry, FreeRTOS tasks, initialization
 
-### Libraries
-- [lib/WiFiManager/](lib/WiFiManager/) - WiFi connection and provisioning AP
-- [lib/WebServer/](lib/WebServer/) - Async web server, REST API, HTML pages
-- [lib/CalibrationManager/](lib/CalibrationManager/) - pH/EC calibration with NVS storage
-- [lib/MQTTManager/](lib/MQTTManager/) - MQTT client, broker config, HA Discovery
+### Components
+- [components/poet_sensor/](components/poet_sensor/) - POET I2C sensor driver
+- [components/calibration/](components/calibration/) - pH/EC calibration
+- [components/wifi_manager/](components/wifi_manager/) - WiFi connection/provisioning
+- [components/mqtt_manager/](components/mqtt_manager/) - MQTT client, HA Discovery
+- [components/http_server/](components/http_server/) - Web server, REST API, handlers
+- [components/ota_manager/](components/ota_manager/) - OTA updates with rollback
+- [components/display_driver/](components/display_driver/) - SSD1306 OLED driver
+- [components/data_history/](components/data_history/) - Historical data buffer
+- [components/derived_metrics/](components/derived_metrics/) - Calculated metrics
+- [components/warning_manager/](components/warning_manager/) - Threshold monitoring
+- [components/tank_settings/](components/tank_settings/) - Tank configuration
 
-### Web UI Components
-- [lib/WebServer/WebServer.cpp](lib/WebServer/WebServer.cpp) - Dashboard, calibration page generation
-- [lib/WebServer/charts_page.h](lib/WebServer/charts_page.h) - Charts page HTML with Chart.js
+### Tests
+- [test/test_native/](test/test_native/) - Host-based unit tests
+- [test/test_embedded/](test/test_embedded/) - Device-based integration tests
+- [docs/TESTING.md](docs/TESTING.md) - Testing guide
+
+### Documentation
+- [README.md](README.md) - Project overview and quick start
+- [docs/INSTALLATION.md](docs/INSTALLATION.md) - Installation guide
+- [docs/HARDWARE.md](docs/HARDWARE.md) - Hardware setup
+- [docs/WEB_UI.md](docs/WEB_UI.md) - Web interface guide
+- [docs/CALIBRATION.md](docs/CALIBRATION.md) - Calibration procedures
+- [docs/MQTT.md](docs/MQTT.md) - MQTT and Home Assistant setup
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Development guide

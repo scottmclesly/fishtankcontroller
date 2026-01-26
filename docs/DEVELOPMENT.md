@@ -2,26 +2,28 @@
 
 ## Project Overview
 
-ESP32-based aquarium controller built around the Sentron POET pH/ORP/EC/Temperature I2C sensor with web interface and MQTT integration.
+ESP32-based aquarium controller built around the Sentron POET pH/ORP/EC/Temperature I2C sensor with web interface, MQTT integration, and OTA updates.
 
-**Status:** Working prototype - WiFi, sensor monitoring, web UI, and MQTT operational
+**Status:** Working prototype - WiFi, sensor monitoring, web UI, MQTT, and OTA operational
 
 ## Build System
 
-### Platform: PlatformIO + Arduino Framework
+### Platform: PlatformIO + ESP-IDF 5.5
 
-**Current configuration:**
-- **Board:** `seeed_xiao_esp32c3` (ESP32-C3)
-- **Framework:** Arduino (for rapid prototyping)
-- **Build tool:** PlatformIO
-
-**Recommended production platform:** ESP32-S3 (better for rich Web UI and multiple sensors)
+**Supported targets:**
+- **Primary:** `seeed_xiao_esp32c6` (ESP32-C6)
+- **Secondary:** `seeed_xiao_esp32c3` (ESP32-C3)
+- **Future:** ESP32-C5 (when PlatformIO adds support)
 
 ### Build Commands
 
 ```bash
-# Build firmware
+# Build firmware (defaults to ESP32-C6)
 pio run
+
+# Build for specific target
+pio run -e seeed_xiao_esp32c6    # ESP32-C6
+pio run -e seeed_xiao_esp32c3    # ESP32-C3
 
 # Build and upload
 pio run -t upload
@@ -29,17 +31,20 @@ pio run -t upload
 # Clean build
 pio run -t clean
 
+# Full clean (removes .pio directory)
+rm -rf .pio && pio run
+
 # Monitor serial output
 pio device monitor
 
 # Build + upload + monitor (common workflow)
 pio run -t upload && pio device monitor
 
-# Run tests
-pio test
+# Run native tests (on host computer)
+pio test -e native
 
-# Update dependencies
-pio pkg update
+# Run embedded tests (on device)
+pio test -e esp32c6_test
 
 # Erase flash (including NVS)
 pio run -t erase
@@ -51,10 +56,16 @@ pio run -t erase
 
 **Key settings:**
 - Platform: espressif32
-- Framework: arduino
-- Board: seeed_xiao_esp32c3
+- Framework: espidf (ESP-IDF 5.5)
+- Default board: seeed_xiao_esp32c6
 - Monitor speed: 115200 baud
-- Libraries: Listed in `lib_deps`
+- Partition table: Custom with OTA support
+
+**Environments:**
+- `seeed_xiao_esp32c6` - Main build target
+- `seeed_xiao_esp32c3` - C3 compatibility build
+- `native` - Host-based unit tests
+- `esp32c6_test` - Device-based integration tests
 
 ## Architecture
 
@@ -62,41 +73,96 @@ pio run -t erase
 
 The system operates fully offline without cloud dependencies:
 
-**Device ↔ UI:**
+**Device <-> UI:**
 - HTTP REST for configuration and snapshots
 - WebSocket for live telemetry (planned, currently HTTP polling)
 - Static Web UI served from device
 
-**Device ↔ Automation:**
+**Device <-> Automation:**
 - MQTT with Home Assistant MQTT Discovery
 - Works with Home Assistant, Node-RED, etc.
 
-### Firmware Responsibilities
-
-1. **Sensor Acquisition** - Read POET sensor via I2C
-2. **Data Conversion** - Transform raw data to user units
-3. **Control Outputs** - Manage relays/drivers (planned)
-4. **REST API** - Serve endpoints for UI
-5. **MQTT Publishing** - Telemetry to automation systems
-6. **Web UI Hosting** - Serve static pages
-7. **Provisioning** - Captive portal for WiFi setup
-
-### Module Structure
+### FreeRTOS Task Structure
 
 ```
-/src                   - Main firmware entry point
-  main.cpp             - Sensor loop, WiFi, MQTT integration
+sensor_task     - POET sensor reading, calibration, derived metrics (priority 5)
+http_task       - Web server and REST API (priority 4)
+mqtt_task       - MQTT client and publishing (priority 3)
+display_task    - OLED display cycling (priority 2)
+monitor_task    - Heap monitoring and leak detection (priority 1)
+```
 
-/lib                   - Custom libraries
-  /WiFiManager         - WiFi connection and AP provisioning
-  /WebServer           - Async web server, REST API, HTML pages
-  /CalibrationManager  - pH/EC calibration with NVS storage
-  /MQTTManager         - MQTT client and HA Discovery
+### Component Structure
 
-/include               - Header files
-/test                  - Unit tests
-/docs                  - Documentation
-/platformio.ini        - Build configuration
+```
+/src/main.c           - Application entry point, task creation
+/components/          - ESP-IDF components (modular firmware)
+  /poet_sensor/       - POET I2C sensor driver
+  /calibration/       - pH/EC calibration with NVS persistence
+  /warning_manager/   - Threshold monitoring and alerts
+  /derived_metrics/   - TDS, CO2, NH3, DO calculations
+  /tank_settings/     - Tank configuration storage
+  /wifi_manager/      - WiFi connection and AP provisioning
+  /mqtt_manager/      - MQTT client with HA Discovery
+  /http_server/       - HTTP server, REST API, handlers
+  /display_driver/    - SSD1306 OLED driver
+  /data_history/      - Circular buffer for historical data
+  /ota_manager/       - OTA updates with rollback protection
+/test/                - Unit tests
+  /test_native/       - Native tests (run on host)
+  /test_embedded/     - Embedded tests (run on device)
+/docs/                - Documentation
+/platformio.ini       - PlatformIO build configuration
+/partitions.csv       - Custom partition table
+/sdkconfig.defaults   - ESP-IDF SDK configuration
+```
+
+## ESP-IDF Development Patterns
+
+### Logging
+
+Use ESP-IDF logging macros:
+```c
+ESP_LOGI(TAG, "Info message: %d", value);
+ESP_LOGW(TAG, "Warning message");
+ESP_LOGE(TAG, "Error message");
+ESP_LOGD(TAG, "Debug message");  // Requires LOG_LOCAL_LEVEL >= DEBUG
+```
+
+### Error Handling
+
+Use `esp_err_t` return types:
+```c
+esp_err_t my_function(void) {
+    esp_err_t ret = some_operation();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Operation failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    return ESP_OK;
+}
+```
+
+### NVS (Non-Volatile Storage)
+
+Configuration persistence:
+```c
+nvs_handle_t handle;
+nvs_open("namespace", NVS_READWRITE, &handle);
+nvs_set_str(handle, "key", value);
+nvs_commit(handle);
+nvs_close(handle);
+```
+
+### Component CMakeLists.txt
+
+Each component needs a `CMakeLists.txt`:
+```cmake
+idf_component_register(
+    SRCS "component.c"
+    INCLUDE_DIRS "include"
+    REQUIRES log nvs_flash json  # Dependencies
+)
 ```
 
 ## POET I2C Sensor Protocol
@@ -104,13 +170,13 @@ The system operates fully offline without cloud dependencies:
 ### Connection Specifications
 
 - **I2C Address:** 0x1F (7-bit, fixed)
-- **Bus Speed:** Up to 400 kHz
+- **Bus Speed:** 400 kHz
 - **Logic Levels:** 3.3V only
-- **Pull-ups:** External 4.7kΩ recommended
+- **Pull-ups:** External 4.7k recommended
 
 ### Measurement Protocol
 
-**Command byte structure** (LSB → MSB):
+**Command byte structure** (LSB -> MSB):
 - Bit 0: Temperature
 - Bit 1: ORP
 - Bit 2: pH
@@ -121,15 +187,44 @@ The system operates fully offline without cloud dependencies:
 
 **Response:** Variable-length reply of 32-bit little-endian signed integers
 
+## Testing
+
+### Native Tests
+
+Run on host computer without hardware:
+```bash
+pio test -e native
+```
+
+Tests pure C calculation functions (derived_metrics).
+
+### Embedded Tests
+
+Run on ESP32 device:
+```bash
+pio test -e esp32c6_test
+```
+
+Tests components requiring ESP-IDF (NVS, FreeRTOS).
+
+### Memory Monitoring
+
+Built-in heap tracking in `monitor_task`:
+- Logs heap usage every 60 seconds
+- Tracks minimum free heap
+- Warns on potential memory leaks
+
 ## Project Status
 
-### ✅ Completed Features
+### Completed Features
 
 **Core Infrastructure:**
-- [x] ESP32-C3 with Arduino framework
+- [x] ESP32-C6/C3 with ESP-IDF 5.5 framework
 - [x] WiFi connection with NVS credential storage
 - [x] AP provisioning mode for initial setup
 - [x] mDNS responder (`http://aquarium.local`)
+- [x] SNTP time synchronization
+- [x] OTA firmware updates with rollback protection
 
 **Sensor System:**
 - [x] POET I2C driver (full protocol implementation)
@@ -139,10 +234,10 @@ The system operates fully offline without cloud dependencies:
 - [x] Calibration storage in NVS
 
 **Data Management:**
-- [x] 288-point circular buffer (24 minutes @ 5-second intervals)
+- [x] 288-point circular buffer
 - [x] CSV and JSON export
-- [x] Historical data tracking
-- [x] Derived metrics calculations (TDS, CO₂, NH₃, DO, stocking)
+- [x] Historical statistics (min/max/avg)
+- [x] Derived metrics (TDS, CO2, NH3, DO, stocking)
 
 **Web Interface:**
 - [x] Live sensor dashboard
@@ -160,70 +255,29 @@ The system operates fully offline without cloud dependencies:
 - [x] Combined JSON payload topic
 - [x] Derived metrics publishing
 - [x] Home Assistant MQTT Discovery
-- [x] Web-based MQTT configuration
-- [x] Real-time connection status
 
-**REST API:**
-- [x] `/api/sensors` - Current readings
-- [x] `/api/history` - Historical data
-- [x] `/api/export/csv` and `/api/export/json`
-- [x] `/api/metrics/derived` - Calculated metrics
-- [x] `/api/settings/tank` - Tank configuration
-- [x] `/api/settings/fish` - Fish profiles
-- [x] `/api/mqtt/config` and `/api/mqtt/status`
+**Testing:**
+- [x] Native unit tests (derived_metrics)
+- [x] Embedded integration tests
+- [x] Memory usage monitoring
 
-**Console Interface:**
-- [x] Serial command interface
-- [x] Status, dump (CSV/JSON), help commands
-
-### 🚧 Planned Features
+### Planned Features
 
 **Short-term:**
 - [ ] WebSocket live feed (replace HTTP polling)
 - [ ] User-configurable sampling rate
 - [ ] Configuration export/import (JSON)
-- [ ] Console commands for WiFi/MQTT reset
 
 **Medium-term:**
 - [ ] Output control (relays/drivers)
 - [ ] Scheduled automation
 - [ ] Alert thresholds and notifications
 - [ ] Long-term data logging (flash/SD)
-- [ ] OTA firmware updates
 
 **Long-term:**
 - [ ] Flutter cross-platform app
 - [ ] TLS/SSL for MQTT
 - [ ] Multi-device support
-- [ ] Additional sensor integrations
-- [ ] Migration to ESP-IDF framework
-
-## Roadmap
-
-### Phase 1: Monitoring (COMPLETE ✅)
-- POET sensor integration
-- Web UI for monitoring
-- MQTT publishing
-- Calibration system
-
-### Phase 2: Control (IN PROGRESS)
-- Relay/driver outputs
-- Manual control via web UI
-- Safety interlocks and failsafes
-- Watchdog timers
-
-### Phase 3: Automation (PLANNED)
-- Scheduled events (lights, feeding)
-- Conditional rules engine
-- Alert thresholds
-- Notification system
-
-### Phase 4: Advanced Features (PLANNED)
-- Flutter mobile app
-- Long-term data logging
-- Multi-device support
-- OTA updates
-- TLS/SSL security
 
 ## Contributing
 
@@ -239,7 +293,7 @@ The system operates fully offline without cloud dependencies:
 4. **Build and test:**
    ```bash
    pio run
-   pio test
+   pio test -e native
    ```
 
 ### Development Workflow
@@ -251,40 +305,33 @@ The system operates fully offline without cloud dependencies:
 
 2. **Make changes and test**
 
-3. **Commit with clear messages:**
+3. **Run tests:**
+   ```bash
+   pio test -e native
+   ```
+
+4. **Commit with clear messages:**
    ```bash
    git commit -m "feat: Add output control support"
    ```
 
-4. **Push and create pull request:**
+5. **Push and create pull request:**
    ```bash
    git push origin feature/your-feature-name
    ```
 
 ### Code Style
 
-**Follow existing patterns:**
-- Use existing code style and conventions
-- Keep functions focused and single-purpose
-- Add comments for complex logic
-- Update documentation for user-facing changes
+**Follow ESP-IDF patterns:**
+- Use `ESP_LOG*()` for logging
+- Use `esp_err_t` return types
+- Store config in NVS
+- Use FreeRTOS primitives
 
-**Avoid over-engineering:**
+**Keep it simple:**
 - Don't add unnecessary abstractions
-- Keep solutions simple and direct
+- Keep solutions direct
 - Only add features that are needed
-- Don't optimize prematurely
-
-### Testing
-
-**Before submitting PR:**
-- Build successfully without warnings
-- Test on actual hardware if possible
-- Verify web UI still works
-- Check serial monitor for errors
-- Test affected features end-to-end
-
-**Future:** Automated testing framework
 
 ### Pull Request Guidelines
 
@@ -294,43 +341,6 @@ The system operates fully offline without cloud dependencies:
 - What was changed and why
 - Testing performed
 - Any breaking changes
-
-**Good PR:**
-- Focused on single feature/fix
-- Clear commit messages
-- Tested on hardware
-- Documentation updated
-- No unrelated changes
-
-## Framework Considerations
-
-### Current: Arduino Framework
-
-**Pros:**
-- Rapid prototyping
-- Large library ecosystem
-- Easy to understand
-- Good for MVP
-
-**Cons:**
-- Less control over low-level features
-- Potential performance limitations
-- OTA and networking less robust
-
-### Future: ESP-IDF
-
-**When to migrate:**
-- Approaching production readiness
-- Need better networking stack
-- Want robust OTA updates
-- Performance becomes critical
-
-**Migration plan:**
-- Core functionality first (sensors, I2C)
-- WiFi and networking
-- Web server (AsyncTCP → ESP-IDF HTTP server)
-- MQTT (migrate to ESP-MQTT)
-- Web UI (LittleFS/SPIFFS compatible)
 
 ## Safety Considerations
 
@@ -352,15 +362,6 @@ This controller may manage equipment supporting living organisms:
 - Follow local electrical codes
 - Professional installation recommended
 
-### Development Best Practices
-
-**When adding output control:**
-- Define safe default states
-- Implement failsafe behavior
-- Add interlock logic
-- Test power loss scenarios
-- Document safety features
-
 ## Resources
 
 ### Documentation
@@ -369,20 +370,13 @@ This controller may manage equipment supporting living organisms:
 - [Calibration Guide](CALIBRATION.md) - Sensor calibration
 - [Web UI Guide](WEB_UI.md) - Web interface features
 - [MQTT Guide](MQTT.md) - MQTT integration
-- [Configuration Guide](CONFIGURATION.md) - Configuration options
+- [Testing Guide](TESTING.md) - Running tests
 - [Troubleshooting](TROUBLESHOOTING.md) - Common issues
 
 ### External Resources
 - [PlatformIO Documentation](https://docs.platformio.org/)
-- [ESP32 Arduino Core](https://github.com/espressif/arduino-esp32)
 - [ESP-IDF Programming Guide](https://docs.espressif.com/projects/esp-idf/)
-- [AsyncWebServer Library](https://github.com/me-no-dev/ESPAsyncWebServer)
-- [PubSubClient (MQTT)](https://github.com/knolleary/pubsubclient)
-
-### Related Projects
-- [ESPHome](https://esphome.io/) - ESP-based home automation
-- [WLED](https://github.com/Aircoookie/WLED) - ESP LED controller (good architecture reference)
-- [Tasmota](https://tasmota.github.io/) - ESP firmware for smart devices
+- [FreeRTOS Documentation](https://www.freertos.org/Documentation/)
 
 ## License
 
@@ -391,10 +385,8 @@ This controller may manage equipment supporting living organisms:
 See [LICENSE](../LICENSE) for full terms.
 
 **Key Points:**
-- ✅ Free for personal, educational, and commercial use
-- ✅ Modifications and derivatives allowed
-- ✅ Attribution required
-- ✅ Patent grant included
-- ⚠️ Trademark usage restricted (see [TRADEMARK.md](../TRADEMARK.md))
-
-**Commercial Use:** Permitted under Apache 2.0. See [COMMERCIAL.md](../COMMERCIAL.md) for guidance and partnership opportunities.
+- Free for personal, educational, and commercial use
+- Modifications and derivatives allowed
+- Attribution required
+- Patent grant included
+- Trademark usage restricted (see [TRADEMARK.md](../TRADEMARK.md))
