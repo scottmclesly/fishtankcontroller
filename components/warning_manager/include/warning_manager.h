@@ -59,6 +59,14 @@ typedef struct {
     float crit_high;
 } threshold_high_only_t;
 
+// Optical sensor thresholds (turbidity and DOC)
+typedef struct {
+    float ntu_warn;             // NTU warning threshold (default: 5.0)
+    float ntu_crit;             // NTU critical threshold (default: 10.0)
+    float doc_warn;             // DOC index warning (default: 50.0)
+    float doc_crit;             // DOC index critical (default: 75.0)
+} optical_thresholds_t;
+
 // =============================================================================
 // Warning Thresholds Structure
 // =============================================================================
@@ -72,6 +80,7 @@ typedef struct {
     threshold_range_t ec;               // uS/cm
     threshold_range_t salinity;         // PSU (for saltwater)
     threshold_range_t dissolved_oxygen; // mg/L
+    optical_thresholds_t optical;       // Turbidity and DOC
 } warning_thresholds_t;
 
 // =============================================================================
@@ -85,6 +94,8 @@ typedef struct {
     warning_state_t ec;
     warning_state_t salinity;
     warning_state_t dissolved_oxygen;
+    warning_state_t turbidity;          // NTU warning state
+    warning_state_t doc_index;          // DOC warning state
 
     // Rate of change tracking
     float temp_rate_per_hour;
@@ -176,6 +187,34 @@ warning_state_t warning_manager_evaluate_ec(float ec_us_cm);
  * @return Warning state
  */
 warning_state_t warning_manager_evaluate_do(float do_mg_l);
+
+/**
+ * @brief Evaluate turbidity (NTU) warning state
+ * @param ntu Turbidity in NTU
+ * @return Warning state
+ */
+warning_state_t warning_manager_evaluate_turbidity(float ntu);
+
+/**
+ * @brief Evaluate DOC index warning state
+ * @param doc_index DOC index (0-100)
+ * @return Warning state
+ */
+warning_state_t warning_manager_evaluate_doc(float doc_index);
+
+/**
+ * @brief Get optical thresholds
+ * @param thresholds Pointer to optical thresholds structure
+ * @return ESP_OK on success
+ */
+esp_err_t warning_manager_get_optical_thresholds(optical_thresholds_t *thresholds);
+
+/**
+ * @brief Set optical thresholds
+ * @param thresholds Pointer to optical thresholds structure
+ * @return ESP_OK on success
+ */
+esp_err_t warning_manager_set_optical_thresholds(const optical_thresholds_t *thresholds);
 
 /**
  * @brief Evaluate all parameters and update internal status

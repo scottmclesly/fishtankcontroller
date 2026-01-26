@@ -40,6 +40,8 @@ static struct {
     metric_state_t ec;
     metric_state_t salinity;
     metric_state_t dissolved_oxygen;
+    metric_state_t turbidity;
+    metric_state_t doc_index;
 } s_metric_states = {0};
 
 // =============================================================================
@@ -95,6 +97,12 @@ static void load_freshwater_community_defaults(void)
     s_thresholds.dissolved_oxygen.crit_low = 4.0f;
     s_thresholds.dissolved_oxygen.crit_high = 100.0f;
     s_thresholds.dissolved_oxygen.rate_change_per_hour = 0.0f;
+
+    // Optical (turbidity and DOC) - same for all tank types
+    s_thresholds.optical.ntu_warn = 5.0f;
+    s_thresholds.optical.ntu_crit = 10.0f;
+    s_thresholds.optical.doc_warn = 50.0f;
+    s_thresholds.optical.doc_crit = 75.0f;
 }
 
 static void load_freshwater_planted_defaults(void)
@@ -163,6 +171,12 @@ static void load_saltwater_fish_only_defaults(void)
     s_thresholds.dissolved_oxygen.crit_low = 4.0f;
     s_thresholds.dissolved_oxygen.crit_high = 100.0f;
     s_thresholds.dissolved_oxygen.rate_change_per_hour = 0.0f;
+
+    // Optical (turbidity and DOC) - same for all tank types
+    s_thresholds.optical.ntu_warn = 5.0f;
+    s_thresholds.optical.ntu_crit = 10.0f;
+    s_thresholds.optical.doc_warn = 50.0f;
+    s_thresholds.optical.doc_crit = 75.0f;
 }
 
 static void load_reef_defaults(void)
@@ -529,6 +543,55 @@ warning_state_t warning_manager_evaluate_do(float do_mg_l)
     return state;
 }
 
+warning_state_t warning_manager_evaluate_turbidity(float ntu)
+{
+    // Convert optical thresholds to threshold_high_only_t format
+    threshold_high_only_t thresh = {
+        .warn_high = s_thresholds.optical.ntu_warn,
+        .crit_high = s_thresholds.optical.ntu_crit
+    };
+    warning_state_t state = evaluate_high_only(ntu, &thresh, &s_metric_states.turbidity);
+    s_status.turbidity = state;
+    return state;
+}
+
+warning_state_t warning_manager_evaluate_doc(float doc_index)
+{
+    // Convert optical thresholds to threshold_high_only_t format
+    threshold_high_only_t thresh = {
+        .warn_high = s_thresholds.optical.doc_warn,
+        .crit_high = s_thresholds.optical.doc_crit
+    };
+    warning_state_t state = evaluate_high_only(doc_index, &thresh, &s_metric_states.doc_index);
+    s_status.doc_index = state;
+    return state;
+}
+
+esp_err_t warning_manager_get_optical_thresholds(optical_thresholds_t *thresholds)
+{
+    if (!thresholds) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *thresholds = s_thresholds.optical;
+    return ESP_OK;
+}
+
+esp_err_t warning_manager_set_optical_thresholds(const optical_thresholds_t *thresholds)
+{
+    if (!thresholds) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    s_thresholds.optical = *thresholds;
+
+    // Save to NVS
+    save_thresholds_to_nvs();
+
+    ESP_LOGI(TAG, "Optical thresholds set: NTU warn=%.1f crit=%.1f, DOC warn=%.1f crit=%.1f",
+             thresholds->ntu_warn, thresholds->ntu_crit,
+             thresholds->doc_warn, thresholds->doc_crit);
+    return ESP_OK;
+}
+
 void warning_manager_evaluate_all(float temp_c, float ph, float nh3_ppm,
                                   float orp_mv, float ec_us_cm, float do_mg_l)
 {
@@ -558,6 +621,8 @@ void warning_manager_reset_states(void)
     s_status.ec = WARNING_STATE_UNKNOWN;
     s_status.salinity = WARNING_STATE_UNKNOWN;
     s_status.dissolved_oxygen = WARNING_STATE_UNKNOWN;
+    s_status.turbidity = WARNING_STATE_UNKNOWN;
+    s_status.doc_index = WARNING_STATE_UNKNOWN;
     s_status.temp_rate_per_hour = 0.0f;
     s_status.ph_rate_per_24h = 0.0f;
 

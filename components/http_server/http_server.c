@@ -38,6 +38,16 @@ extern esp_err_t handle_ota_rollback_post(httpd_req_t *req);
 extern esp_err_t handle_ota_reboot_post(httpd_req_t *req);
 extern esp_err_t handle_websocket(httpd_req_t *req);
 
+// Optical sensor handlers
+extern esp_err_t handle_optical_status_get(httpd_req_t *req);
+extern esp_err_t handle_optical_reading_get(httpd_req_t *req);
+extern esp_err_t handle_optical_measure_post(httpd_req_t *req);
+extern esp_err_t handle_optical_calibration_get(httpd_req_t *req);
+extern esp_err_t handle_optical_calibrate_clear_post(httpd_req_t *req);
+extern esp_err_t handle_optical_calibrate_dirty_post(httpd_req_t *req);
+extern esp_err_t handle_optical_calibration_delete(httpd_req_t *req);
+extern esp_err_t handle_optical_thresholds_post(httpd_req_t *req);
+
 // WebSocket client tracking
 #define WS_MAX_CLIENTS 4
 static int s_ws_fds[WS_MAX_CLIENTS] = {-1, -1, -1, -1};
@@ -53,13 +63,18 @@ static struct {
     float co2_ppm;
     float nh3_ppm;
     float max_do_mg_l;
+    float ntu;
+    float doc_index;
     uint8_t temp_warning;
     uint8_t ph_warning;
     uint8_t orp_warning;
     uint8_t ec_warning;
     uint8_t nh3_warning;
     uint8_t do_warning;
+    uint8_t ntu_warning;
+    uint8_t doc_warning;
     bool valid;
+    bool optical_valid;
 } s_sensor_data = {0};
 
 void http_server_update_sensor_data(float temp_c, float orp_mv, float ph, float ec_ms_cm,
@@ -107,6 +122,17 @@ void http_server_get_sensor_data(float *temp_c, float *orp_mv, float *ph, float 
     if (valid) *valid = s_sensor_data.valid;
 }
 
+void http_server_update_optical_data(float ntu, float doc_index,
+                                      uint8_t ntu_warning, uint8_t doc_warning,
+                                      bool valid)
+{
+    s_sensor_data.ntu = ntu;
+    s_sensor_data.doc_index = doc_index;
+    s_sensor_data.ntu_warning = ntu_warning;
+    s_sensor_data.doc_warning = doc_warning;
+    s_sensor_data.optical_valid = valid;
+}
+
 // Embedded Dashboard HTML
 static const char *DASHBOARD_HTML =
 "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -117,10 +143,12 @@ static const char *DASHBOARD_HTML =
 ".card h3{font-size:14px;color:#888;margin-bottom:8px}"
 ".card .value{font-size:32px;font-weight:bold}"
 ".card .unit{font-size:14px;color:#888}"
-".ok{color:#4ade80}.warn{color:#fbbf24}.alert{color:#f87171}"
+".ok{color:#4ade80}.warn{color:#fbbf24}.crit{color:#f87171}"
 "h1{text-align:center;margin-bottom:20px;color:#818cf8}"
 ".status{text-align:center;color:#888;margin-top:20px;font-size:12px}"
 "nav{text-align:center;margin-bottom:20px}nav a{color:#818cf8;margin:0 10px}"
+".section{margin-top:25px;border-top:1px solid #333;padding-top:15px}"
+".section h2{text-align:center;color:#818cf8;font-size:16px;margin-bottom:15px}"
 "</style></head><body>"
 "<h1>Aquarium Controller</h1>"
 "<nav><a href='/'>Dashboard</a><a href='/calibration'>Calibration</a></nav>"
@@ -132,8 +160,13 @@ static const char *DASHBOARD_HTML =
 "<div class='card'><h3>TDS</h3><div class='value' id='tds'>--</div><div class='unit'>ppm</div></div>"
 "<div class='card'><h3>CO2</h3><div class='value' id='co2'>--</div><div class='unit'>ppm</div></div>"
 "</div>"
+"<div class='section'><h2>Water Clarity</h2><div class='grid'>"
+"<div class='card'><h3>Turbidity</h3><div class='value' id='ntu'>--</div><div class='unit'>NTU</div></div>"
+"<div class='card'><h3>DOC Index</h3><div class='value' id='doc'>--</div><div class='unit'>0-100</div></div>"
+"</div></div>"
 "<div class='status' id='status'>Connecting...</div>"
 "<script>"
+"function wc(el,w){el.classList.remove('ok','warn','crit');if(w===1)el.classList.add('ok');else if(w===2)el.classList.add('warn');else if(w===3)el.classList.add('crit');}"
 "const ws=new WebSocket('ws://'+location.host+'/ws');"
 "ws.onmessage=e=>{const d=JSON.parse(e.data);"
 "if(d.type==='sensor_data'){"
@@ -143,6 +176,9 @@ static const char *DASHBOARD_HTML =
 "document.getElementById('ec').textContent=d.data.ec_ms_cm.toFixed(3);"
 "document.getElementById('tds').textContent=d.data.tds_ppm.toFixed(0);"
 "document.getElementById('co2').textContent=d.data.co2_ppm.toFixed(0);"
+"if(d.data.optical_valid){"
+"const ntuEl=document.getElementById('ntu');ntuEl.textContent=d.data.ntu.toFixed(1);wc(ntuEl,d.data.warnings.ntu);"
+"const docEl=document.getElementById('doc');docEl.textContent=d.data.doc_index.toFixed(0);wc(docEl,d.data.warnings.doc);}"
 "document.getElementById('status').textContent='Live - '+new Date().toLocaleTimeString();}};"
 "ws.onclose=()=>document.getElementById('status').textContent='Disconnected';"
 "</script></body></html>";
@@ -189,6 +225,7 @@ esp_err_t http_server_start(http_server_t *server)
     http_server_register_mqtt_routes(server->handle);
     http_server_register_settings_routes(server->handle);
     http_server_register_ota_routes(server->handle);
+    http_server_register_optical_routes(server->handle);
     http_server_register_websocket(server->handle);
 
     ESP_LOGI(TAG, "HTTP server started");
@@ -287,6 +324,27 @@ void http_server_register_ota_routes(httpd_handle_t server)
     ESP_LOGI(TAG, "OTA routes registered");
 }
 
+void http_server_register_optical_routes(httpd_handle_t server)
+{
+    httpd_uri_t status = { .uri = "/api/optical/status", .method = HTTP_GET, .handler = handle_optical_status_get };
+    httpd_uri_t reading = { .uri = "/api/optical/reading", .method = HTTP_GET, .handler = handle_optical_reading_get };
+    httpd_uri_t measure = { .uri = "/api/optical/measure", .method = HTTP_POST, .handler = handle_optical_measure_post };
+    httpd_uri_t cal_get = { .uri = "/api/optical/calibration", .method = HTTP_GET, .handler = handle_optical_calibration_get };
+    httpd_uri_t cal_clear = { .uri = "/api/optical/calibrate/clear", .method = HTTP_POST, .handler = handle_optical_calibrate_clear_post };
+    httpd_uri_t cal_dirty = { .uri = "/api/optical/calibrate/dirty", .method = HTTP_POST, .handler = handle_optical_calibrate_dirty_post };
+    httpd_uri_t cal_delete = { .uri = "/api/optical/calibration", .method = HTTP_DELETE, .handler = handle_optical_calibration_delete };
+    httpd_uri_t thresh = { .uri = "/api/optical/thresholds", .method = HTTP_POST, .handler = handle_optical_thresholds_post };
+    httpd_register_uri_handler(server, &status);
+    httpd_register_uri_handler(server, &reading);
+    httpd_register_uri_handler(server, &measure);
+    httpd_register_uri_handler(server, &cal_get);
+    httpd_register_uri_handler(server, &cal_clear);
+    httpd_register_uri_handler(server, &cal_dirty);
+    httpd_register_uri_handler(server, &cal_delete);
+    httpd_register_uri_handler(server, &thresh);
+    ESP_LOGI(TAG, "Optical routes registered");
+}
+
 void http_server_register_static_routes(httpd_handle_t server)
 {
     ESP_LOGI(TAG, "Static routes: using embedded HTML");
@@ -380,6 +438,11 @@ void http_server_broadcast_sensor_data(void)
     cJSON_AddNumberToObject(data, "max_do_mg_l", s_sensor_data.max_do_mg_l);
     cJSON_AddBoolToObject(data, "valid", true);
 
+    // Optical sensor data
+    cJSON_AddNumberToObject(data, "ntu", s_sensor_data.ntu);
+    cJSON_AddNumberToObject(data, "doc_index", s_sensor_data.doc_index);
+    cJSON_AddBoolToObject(data, "optical_valid", s_sensor_data.optical_valid);
+
     cJSON *warnings = cJSON_AddObjectToObject(data, "warnings");
     cJSON_AddNumberToObject(warnings, "temp", s_sensor_data.temp_warning);
     cJSON_AddNumberToObject(warnings, "ph", s_sensor_data.ph_warning);
@@ -387,6 +450,8 @@ void http_server_broadcast_sensor_data(void)
     cJSON_AddNumberToObject(warnings, "ec", s_sensor_data.ec_warning);
     cJSON_AddNumberToObject(warnings, "nh3", s_sensor_data.nh3_warning);
     cJSON_AddNumberToObject(warnings, "do", s_sensor_data.do_warning);
+    cJSON_AddNumberToObject(warnings, "ntu", s_sensor_data.ntu_warning);
+    cJSON_AddNumberToObject(warnings, "doc", s_sensor_data.doc_warning);
 
     char *json = cJSON_PrintUnformatted(root);
     if (json) {

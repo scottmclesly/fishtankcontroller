@@ -1,0 +1,4 @@
+## IDF Component Manager Manifest File
+dependencies:
+  # LED strip driver for WS2812B
+  espressif/led_strip: "*"

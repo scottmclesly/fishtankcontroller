@@ -107,6 +107,19 @@ void http_server_register_settings_routes(httpd_handle_t server);
 void http_server_register_ota_routes(httpd_handle_t server);
 
 /**
+ * @brief Register optical sensor API routes
+ * - GET /api/optical/status
+ * - GET /api/optical/reading
+ * - POST /api/optical/measure
+ * - GET /api/optical/calibration
+ * - POST /api/optical/calibrate/clear
+ * - POST /api/optical/calibrate/dirty
+ * - DELETE /api/optical/calibration
+ * - POST /api/optical/thresholds
+ */
+void http_server_register_optical_routes(httpd_handle_t server);
+
+/**
  * @brief Register static file routes (HTML, CSS, JS from LittleFS)
  * - GET / - Dashboard
  * - GET /calibration - Calibration page
@@ -151,6 +164,13 @@ void http_server_update_sensor_data(float temp_c, float orp_mv, float ph, float 
  * @brief Broadcast sensor data to all WebSocket clients
  */
 void http_server_broadcast_sensor_data(void);
+
+/**
+ * @brief Update optical sensor data (called from sensor task)
+ */
+void http_server_update_optical_data(float ntu, float doc_index,
+                                      uint8_t ntu_warning, uint8_t doc_warning,
+                                      bool valid);
 
 #ifdef __cplusplus
 }

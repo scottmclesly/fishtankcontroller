@@ -42,6 +42,9 @@
 #include "data_history.h"
 #include "ota_manager.h"
 
+// Phase 6 components (optical sensing)
+#include "optical_sensor.h"
+
 // HTTP server instance
 static http_server_t s_http_server = {0};
 
@@ -60,6 +63,12 @@ static const char *TAG = "fishtank_main";
 // =============================================================================
 #define POET_SENSOR_ADDR        0x1F    // POET pH/ORP/EC/Temp sensor
 #define SSD1306_DISPLAY_ADDR    0x3C    // OLED display
+#define TSL2591_SENSOR_ADDR     0x29    // TSL2591 light sensor
+
+// =============================================================================
+// GPIO Definitions
+// =============================================================================
+#define WS2812B_LED_GPIO        1       // WS2812B RGB LED for optical sensing
 
 // =============================================================================
 // Task Configuration
@@ -85,6 +94,7 @@ static const char *TAG = "fishtank_main";
 #define SENSOR_READ_INTERVAL_MS     5000    // Read sensors every 5 seconds
 #define POET_MEASUREMENT_DELAY_MS   2800    // POET sensor measurement time
 #define DISPLAY_CYCLE_INTERVAL_MS   3000    // Cycle display metrics every 3 seconds
+#define OPTICAL_MEASURE_INTERVAL    12      // Measure optical every 12 cycles (~60s)
 
 // =============================================================================
 // Global Synchronization Primitives
@@ -118,6 +128,14 @@ typedef struct {
     uint8_t orp_warning_state;
     uint8_t ec_warning_state;
     uint8_t do_warning_state;
+    // Optical sensor data
+    float ntu;
+    float ntu_filtered;
+    float doc_index;
+    float doc_filtered;
+    uint8_t ntu_warning_state;
+    uint8_t doc_warning_state;
+    bool optical_valid;
     time_t timestamp;
 } sensor_data_t;
 
@@ -177,6 +195,9 @@ static void sensor_task(void *pvParameters)
     float tan_ppm = tank_settings_get_tan();
     float tank_volume = tank_settings_get_volume();
     float total_fish_length = tank_settings_get_total_fish_length();
+
+    // Optical measurement cycle counter
+    uint8_t optical_cycle_count = 0;
 
     while (1) {
         sensor_data_t data = {0};
@@ -260,6 +281,43 @@ static void sensor_task(void *pvParameters)
                  data.temp_c, data.orp_mv, data.ph, data.ec_ms_cm);
         ESP_LOGD(TAG, "Derived: TDS=%.0fppm, CO2=%.0fppm, NH3=%.3fppm, DO=%.1fmg/L",
                  data.tds_ppm, data.co2_ppm, data.nh3_ppm, data.max_do_mg_l);
+
+        // Optical measurement (every OPTICAL_MEASURE_INTERVAL cycles)
+        optical_cycle_count++;
+        if (optical_cycle_count >= OPTICAL_MEASURE_INTERVAL && optical_sensor_is_ready()) {
+            optical_cycle_count = 0;
+
+            optical_measurement_t optical;
+            optical_err_t opt_ret = optical_sensor_measure(&optical);
+
+            if (opt_ret == OPTICAL_OK) {
+                data.ntu = optical.ntu;
+                data.ntu_filtered = optical_sensor_get_filtered_ntu();
+                data.doc_index = optical.doc_index;
+                data.doc_filtered = optical_sensor_get_filtered_doc();
+                data.optical_valid = true;
+
+                // Evaluate optical warnings
+                data.ntu_warning_state = warning_manager_evaluate_turbidity(data.ntu_filtered);
+                data.doc_warning_state = warning_manager_evaluate_doc(data.doc_filtered);
+
+                ESP_LOGI(TAG, "Optical: NTU=%.2f (filt=%.2f), DOC=%.1f (filt=%.1f)",
+                         data.ntu, data.ntu_filtered, data.doc_index, data.doc_filtered);
+
+                // Update HTTP server with optical data
+                http_server_update_optical_data(
+                    data.ntu_filtered, data.doc_filtered,
+                    data.ntu_warning_state, data.doc_warning_state, true);
+                http_server_broadcast_sensor_data();
+
+                // Update queue with optical data
+                xQueueOverwrite(sensor_data_queue, &data);
+            } else if (opt_ret == OPTICAL_ERR_HIGH_AMBIENT) {
+                ESP_LOGD(TAG, "Optical: skipped due to high ambient light");
+            } else {
+                ESP_LOGW(TAG, "Optical measurement failed: %d", opt_ret);
+            }
+        }
 
 next_cycle:
         // Wait for next interval
@@ -595,6 +653,16 @@ void app_main(void)
     }
 
     ESP_LOGI(TAG, "Phase 5 components initialized");
+
+    // Initialize Phase 6 components (optical sensing)
+    ret = optical_sensor_init(i2c_bus_handle, WS2812B_LED_GPIO);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Optical sensor init failed: %s (optical sensing disabled)", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "Optical sensor initialized");
+    }
+
+    ESP_LOGI(TAG, "Phase 6 components initialized");
 
     // Create FreeRTOS tasks
     ESP_LOGI(TAG, "Creating FreeRTOS tasks...");

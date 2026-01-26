@@ -23,4 +23,5 @@ idf_component_register(
         display_driver
         data_history
         ota_manager
+        optical_sensor
 )

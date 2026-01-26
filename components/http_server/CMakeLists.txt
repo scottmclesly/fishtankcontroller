@@ -7,6 +7,7 @@ idf_component_register(
         "handlers/settings_handlers.c"
         "handlers/ota_handlers.c"
         "handlers/websocket_handler.c"
+        "handlers/optical_handlers.c"
     INCLUDE_DIRS "include"
     REQUIRES
         esp_http_server
@@ -20,4 +21,5 @@ idf_component_register(
         app_update
         ota_manager
         freertos
+        optical_sensor
 )
