@@ -11,5 +11,10 @@
             ".cache": true,
             "retool.config.json": true
         }
-    }
+    },
+    "folders": [
+        {
+            "path": "../.."
+        }
+    ]
 }
